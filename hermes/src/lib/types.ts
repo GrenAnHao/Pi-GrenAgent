@@ -1,10 +1,8 @@
 export type ThinkingLevel = 'low' | 'medium' | 'high';
 
-export interface ContentPart {
-  type: 'text' | 'image';
-  text?: string;
-  imageUrl?: string;
-}
+export type ContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image'; imageUrl: string };
 
 export interface ImageContent {
   type: 'image';
@@ -20,7 +18,7 @@ export type RpcCommand =
   | { id?: string; type: 'new_session'; parentSession?: string }
   | { id?: string; type: 'set_model'; provider: string; modelId: string };
 
-export interface RpcResponse<T = any> {
+export interface RpcResponse<T = unknown> {
   id?: string;
   type: 'response';
   command: string;
@@ -34,7 +32,7 @@ export interface AssistantMessageEvent {
   delta?: string;
   toolCallId?: string;
   toolName?: string;
-  params?: any;
+  params?: unknown;
 }
 
 export type AgentEvent =
@@ -43,9 +41,9 @@ export type AgentEvent =
   | { type: 'message_start'; role: string; timestamp: number }
   | { type: 'message_update'; assistantMessageEvent: AssistantMessageEvent }
   | { type: 'message_end'; timestamp: number }
-  | { type: 'tool_execution_start'; toolCallId: string; toolName: string; params: any }
+  | { type: 'tool_execution_start'; toolCallId: string; toolName: string; params: unknown }
   | { type: 'tool_execution_update'; toolCallId: string; content: string }
-  | { type: 'tool_execution_end'; toolCallId: string; result: any }
+  | { type: 'tool_execution_end'; toolCallId: string; result: unknown }
   | { type: 'turn_start'; timestamp: number }
   | { type: 'turn_end'; timestamp: number };
 
@@ -59,9 +57,9 @@ export interface AgentMessage {
 export interface ToolExecution {
   toolCallId: string;
   toolName: string;
-  params: any;
+  params: unknown;
   status: 'running' | 'success' | 'error';
-  result?: any;
+  result?: unknown;
   startTime: number;
   endTime?: number;
 }
