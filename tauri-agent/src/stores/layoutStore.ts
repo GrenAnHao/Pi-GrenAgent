@@ -1,9 +1,16 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-const DEFAULT_SIDEBAR_WIDTH = 240;
-const DEFAULT_RIGHT_PANEL_WIDTH = 320;
-const DEFAULT_TERMINAL_HEIGHT = 200;
+export const DEFAULT_SIDEBAR_WIDTH = 240;
+export const DEFAULT_RIGHT_PANEL_WIDTH = 320;
+export const DEFAULT_TERMINAL_HEIGHT = 200;
+
+export const SIDEBAR_MIN_WIDTH = 180;
+export const SIDEBAR_MAX_WIDTH = 600;
+export const RIGHT_PANEL_MIN_WIDTH = 200;
+export const RIGHT_PANEL_MAX_WIDTH = 800;
+export const TERMINAL_MIN_HEIGHT = 100;
+export const TERMINAL_MAX_HEIGHT = 600;
 
 interface LayoutState {
   sidebarWidth: number;
@@ -32,18 +39,30 @@ export const useLayoutStore = create<LayoutState>()(
       terminalOpen: false,
 
       setSidebarWidth: (width) =>
-        set({ sidebarWidth: Math.max(180, Math.min(width, 600)) }),
+        set({
+          sidebarWidth: Math.max(SIDEBAR_MIN_WIDTH, Math.min(width, SIDEBAR_MAX_WIDTH)),
+        }),
 
       toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
 
       setRightPanelWidth: (width) =>
-        set({ rightPanelWidth: Math.max(200, Math.min(width, 800)) }),
+        set({
+          rightPanelWidth: Math.max(
+            RIGHT_PANEL_MIN_WIDTH,
+            Math.min(width, RIGHT_PANEL_MAX_WIDTH),
+          ),
+        }),
 
       toggleRightPanel: () =>
         set((state) => ({ rightPanelOpen: !state.rightPanelOpen })),
 
       setTerminalHeight: (height) =>
-        set({ terminalHeight: Math.max(100, Math.min(height, 600)) }),
+        set({
+          terminalHeight: Math.max(
+            TERMINAL_MIN_HEIGHT,
+            Math.min(height, TERMINAL_MAX_HEIGHT),
+          ),
+        }),
 
       toggleTerminal: () => set((state) => ({ terminalOpen: !state.terminalOpen })),
     }),
@@ -51,10 +70,10 @@ export const useLayoutStore = create<LayoutState>()(
       name: 'hermes-layout',
       partialize: (state) => ({
         sidebarWidth: state.sidebarWidth,
-        rightPanelWidth: state.rightPanelWidth,
-        terminalHeight: state.terminalHeight,
         sidebarOpen: state.sidebarOpen,
+        rightPanelWidth: state.rightPanelWidth,
         rightPanelOpen: state.rightPanelOpen,
+        terminalHeight: state.terminalHeight,
         terminalOpen: state.terminalOpen,
       }),
     },

@@ -1,23 +1,37 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { useLayoutStore } from './layoutStore';
+import {
+  useLayoutStore,
+  DEFAULT_SIDEBAR_WIDTH,
+  DEFAULT_RIGHT_PANEL_WIDTH,
+  DEFAULT_TERMINAL_HEIGHT,
+  SIDEBAR_MIN_WIDTH,
+  SIDEBAR_MAX_WIDTH,
+  RIGHT_PANEL_MIN_WIDTH,
+  RIGHT_PANEL_MAX_WIDTH,
+  TERMINAL_MIN_HEIGHT,
+  TERMINAL_MAX_HEIGHT,
+} from './layoutStore';
 
 describe('layoutStore', () => {
   beforeEach(() => {
     useLayoutStore.setState({
-      sidebarWidth: 240,
+      sidebarWidth: DEFAULT_SIDEBAR_WIDTH,
       sidebarOpen: true,
-      rightPanelWidth: 320,
+      rightPanelWidth: DEFAULT_RIGHT_PANEL_WIDTH,
       rightPanelOpen: false,
-      terminalHeight: 200,
+      terminalHeight: DEFAULT_TERMINAL_HEIGHT,
       terminalOpen: false,
     });
   });
 
   it('should have default values', () => {
     const state = useLayoutStore.getState();
-    expect(state.sidebarWidth).toBe(240);
-    expect(state.rightPanelWidth).toBe(320);
-    expect(state.terminalHeight).toBe(200);
+    expect(state.sidebarWidth).toBe(DEFAULT_SIDEBAR_WIDTH);
+    expect(state.rightPanelWidth).toBe(DEFAULT_RIGHT_PANEL_WIDTH);
+    expect(state.terminalHeight).toBe(DEFAULT_TERMINAL_HEIGHT);
+    expect(state.sidebarOpen).toBe(true);
+    expect(state.rightPanelOpen).toBe(false);
+    expect(state.terminalOpen).toBe(false);
   });
 
   it('should update sidebar width', () => {
@@ -56,24 +70,63 @@ describe('layoutStore', () => {
     expect(useLayoutStore.getState().terminalOpen).toBe(false);
   });
 
-  it('should clamp sidebar width to [180, 600]', () => {
-    useLayoutStore.getState().setSidebarWidth(50);
-    expect(useLayoutStore.getState().sidebarWidth).toBe(180);
-    useLayoutStore.getState().setSidebarWidth(9999);
-    expect(useLayoutStore.getState().sidebarWidth).toBe(600);
+  it('should clamp sidebar width to [SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH]', () => {
+    useLayoutStore.getState().setSidebarWidth(SIDEBAR_MIN_WIDTH - 1);
+    expect(useLayoutStore.getState().sidebarWidth).toBe(SIDEBAR_MIN_WIDTH);
+    useLayoutStore.getState().setSidebarWidth(SIDEBAR_MAX_WIDTH + 1);
+    expect(useLayoutStore.getState().sidebarWidth).toBe(SIDEBAR_MAX_WIDTH);
   });
 
-  it('should clamp right panel width to [200, 800]', () => {
-    useLayoutStore.getState().setRightPanelWidth(10);
-    expect(useLayoutStore.getState().rightPanelWidth).toBe(200);
-    useLayoutStore.getState().setRightPanelWidth(9999);
-    expect(useLayoutStore.getState().rightPanelWidth).toBe(800);
+  it('should clamp right panel width to [RIGHT_PANEL_MIN_WIDTH, RIGHT_PANEL_MAX_WIDTH]', () => {
+    useLayoutStore.getState().setRightPanelWidth(RIGHT_PANEL_MIN_WIDTH - 1);
+    expect(useLayoutStore.getState().rightPanelWidth).toBe(RIGHT_PANEL_MIN_WIDTH);
+    useLayoutStore.getState().setRightPanelWidth(RIGHT_PANEL_MAX_WIDTH + 1);
+    expect(useLayoutStore.getState().rightPanelWidth).toBe(RIGHT_PANEL_MAX_WIDTH);
   });
 
-  it('should clamp terminal height to [100, 600]', () => {
-    useLayoutStore.getState().setTerminalHeight(10);
-    expect(useLayoutStore.getState().terminalHeight).toBe(100);
-    useLayoutStore.getState().setTerminalHeight(9999);
-    expect(useLayoutStore.getState().terminalHeight).toBe(600);
+  it('should clamp terminal height to [TERMINAL_MIN_HEIGHT, TERMINAL_MAX_HEIGHT]', () => {
+    useLayoutStore.getState().setTerminalHeight(TERMINAL_MIN_HEIGHT - 1);
+    expect(useLayoutStore.getState().terminalHeight).toBe(TERMINAL_MIN_HEIGHT);
+    useLayoutStore.getState().setTerminalHeight(TERMINAL_MAX_HEIGHT + 1);
+    expect(useLayoutStore.getState().terminalHeight).toBe(TERMINAL_MAX_HEIGHT);
+  });
+
+  describe('persistence (hermes-layout)', () => {
+    it('should write state to localStorage on update', () => {
+      localStorage.clear();
+      useLayoutStore.getState().setSidebarWidth(300);
+
+      const raw = localStorage.getItem('hermes-layout');
+      expect(raw).not.toBeNull();
+      expect(JSON.parse(raw!).state.sidebarWidth).toBe(300);
+    });
+
+    it('should rehydrate state from localStorage', async () => {
+      localStorage.clear();
+      localStorage.setItem(
+        'hermes-layout',
+        JSON.stringify({
+          state: {
+            sidebarWidth: 321,
+            sidebarOpen: false,
+            rightPanelWidth: 456,
+            rightPanelOpen: true,
+            terminalHeight: 234,
+            terminalOpen: true,
+          },
+          version: 0,
+        }),
+      );
+
+      await useLayoutStore.persist.rehydrate();
+
+      const state = useLayoutStore.getState();
+      expect(state.sidebarWidth).toBe(321);
+      expect(state.sidebarOpen).toBe(false);
+      expect(state.rightPanelWidth).toBe(456);
+      expect(state.rightPanelOpen).toBe(true);
+      expect(state.terminalHeight).toBe(234);
+      expect(state.terminalOpen).toBe(true);
+    });
   });
 });
