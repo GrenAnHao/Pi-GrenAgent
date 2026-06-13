@@ -1,43 +1,11 @@
 import { Flexbox } from '@lobehub/ui';
-import { useState, type ChangeEvent, type CSSProperties } from 'react';
+import { useState } from 'react';
 import { useSettingsForm } from './useSettingsForm';
-import { SETTINGS_SCHEMA, type SettingField } from './settingsSchema';
+import { SETTINGS_SCHEMA } from './settingsSchema';
+import { SettingFieldInput } from './SettingField';
 
 const muted = 'var(--gren-fg-muted, #9aa1ac)';
 const border = '1px solid var(--gren-border, rgba(255,255,255,0.08))';
-
-function Field({
-  field,
-  value,
-  onChange,
-}: {
-  field: SettingField;
-  value: string;
-  onChange: (v: string) => void;
-}) {
-  const inputStyle: CSSProperties = {
-    width: '100%',
-    padding: '6px 8px',
-    borderRadius: 6,
-    border,
-    background: 'transparent',
-    color: 'inherit',
-    fontSize: 13,
-  };
-  return (
-    <Flexbox gap={4} style={{ marginBlockEnd: 12 }}>
-      <span style={{ fontSize: 12, color: muted }}>{field.label}</span>
-      <input
-        data-testid={`set-field-${field.key}`}
-        value={value ?? ''}
-        placeholder={field.placeholder}
-        type={field.type === 'password' ? 'password' : field.type === 'number' ? 'number' : 'text'}
-        onChange={(e: ChangeEvent<HTMLInputElement>) => onChange(e.target.value)}
-        style={inputStyle}
-      />
-    </Flexbox>
-  );
-}
 
 export function SettingsPanel() {
   const { values, setValue, save, saving, loading, error } = useSettingsForm();
@@ -97,7 +65,12 @@ export function SettingsPanel() {
         </Flexbox>
         <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: 16, maxWidth: 560 }}>
           {cat.fields.map((f) => (
-            <Field key={f.key} field={f} value={values[f.key] ?? ''} onChange={(v) => setValue(f.key, v)} />
+            <SettingFieldInput
+              key={f.key}
+              field={f}
+              value={values[f.key] ?? ''}
+              onChange={(v) => setValue(f.key, v)}
+            />
           ))}
         </div>
       </Flexbox>
