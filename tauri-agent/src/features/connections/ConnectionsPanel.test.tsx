@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const { getSettings, setSettings, closeWorkspace, openWorkspace } = vi.hoisted(() => ({
-  getSettings: vi.fn(() => Promise.resolve({ IM_GATEWAY: '0', IM_GATEWAY_PORT: '8765' })),
+  getSettings: vi.fn((): Promise<Record<string, string>> => Promise.resolve({ IM_GATEWAY: '0', IM_GATEWAY_PORT: '8765' })),
   setSettings: vi.fn(() => Promise.resolve()),
   closeWorkspace: vi.fn(() => Promise.resolve()),
   openWorkspace: vi.fn(() => Promise.resolve({})),
@@ -37,5 +37,15 @@ describe('ConnectionsPanel', () => {
     await waitFor(() =>
       expect(setSettings).toHaveBeenCalledWith(expect.objectContaining({ IM_GATEWAY_PORT: '9000' })),
     );
+  });
+
+  it('lists configured MCP servers from MCP_SERVERS (stdio/sse)', async () => {
+    getSettings.mockResolvedValueOnce({
+      MCP_SERVERS: '{"fs":{"command":"npx","args":["-y","x"]},"api":{"url":"https://m"}}',
+    });
+    render(<ConnectionsPanel />);
+    await waitFor(() => expect(screen.getByTestId('mcp-server-fs')).toBeTruthy());
+    expect(screen.getByTestId('mcp-server-fs').textContent).toContain('stdio');
+    expect(screen.getByTestId('mcp-server-api').textContent).toContain('sse');
   });
 });
