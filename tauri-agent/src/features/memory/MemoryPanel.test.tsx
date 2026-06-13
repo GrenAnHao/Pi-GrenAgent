@@ -63,4 +63,20 @@ describe('MemoryPanel', () => {
     fireEvent.click(screen.getByTestId('mem-clear'));
     await waitFor(() => expect(runCommand).toHaveBeenCalledWith('/ws', '/memory clear all'));
   });
+
+  it('adds a memory via /memory add', async () => {
+    vi.spyOn(window, 'prompt').mockReturnValue('用户喜欢深色');
+    render(<MemoryPanel />);
+    await waitFor(() => expect(screen.getByTestId('mem-add')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('mem-add'));
+    await waitFor(() => expect(runCommand).toHaveBeenCalledWith('/ws', '/memory add 用户喜欢深色'));
+  });
+
+  it('promotes a project memory to global', async () => {
+    render(<MemoryPanel />);
+    await waitFor(() => expect(screen.getByTestId('mem-item-project-p1')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('mem-item-project-p1'));
+    fireEvent.click(screen.getByTestId('mem-promote'));
+    await waitFor(() => expect(runCommand).toHaveBeenCalledWith('/ws', '/memory promote p1'));
+  });
 });

@@ -224,6 +224,36 @@ export default function (pi: ExtensionAPI) {
       const parts = args.trim().split(/\s+/).filter(Boolean);
       const sub = parts[0] ?? "list";
 
+      if (sub === "add") {
+        const text = parts.slice(1).join(" ").trim();
+        if (!text) {
+          ctx.ui.notify("Usage: /memory add <text>", "warn");
+          return;
+        }
+        const config = resolveEmbeddingConfig();
+        const { id } = await project.save(text, "manual", config);
+        ctx.ui.notify(`Saved project memory [${id}]: ${text}`, "success");
+        return;
+      }
+
+      if (sub === "promote") {
+        const id = parts[1];
+        if (!id) {
+          ctx.ui.notify("Usage: /memory promote <id>", "warn");
+          return;
+        }
+        const m = project.list(1000).find((x) => x.id === id);
+        if (!m) {
+          ctx.ui.notify(`No project memory ${id}.`, "warn");
+          return;
+        }
+        const config = resolveEmbeddingConfig();
+        await global.save(m.text, m.category ?? null, config);
+        project.forget(id);
+        ctx.ui.notify(`Promoted ${id} to global memory.`, "success");
+        return;
+      }
+
       if (sub === "list") {
         const lines = [
           ...project.list(50).map((m) => `[${m.id}] (project${m.category ? `/${m.category}` : ""}) ${m.text}`),

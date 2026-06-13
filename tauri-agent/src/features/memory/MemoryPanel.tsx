@@ -1,5 +1,5 @@
 import { ActionIcon, Flexbox } from '@lobehub/ui';
-import { Trash2 } from 'lucide-react';
+import { ArrowUp, Plus, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useAgentStoreContext } from '../../stores/AgentStoreContext';
 import { pi, type MemItem, type MemStats } from '../../lib/pi';
@@ -71,6 +71,20 @@ export function MemoryPanel() {
     reload();
   }, [workspace, selected, reload]);
 
+  const onAdd = useCallback(async () => {
+    const text = window.prompt('输入要记住的内容：');
+    if (!text?.trim()) return;
+    await pi.runCommand(workspace, `/memory add ${text.trim()}`);
+    reload();
+  }, [workspace, reload]);
+
+  const onPromote = useCallback(async () => {
+    if (!selected || selected.scope !== 'project') return;
+    await pi.runCommand(workspace, `/memory promote ${selected.id}`);
+    setSelectedKey(null);
+    reload();
+  }, [workspace, selected, reload]);
+
   const header = (
     <Flexbox horizontal align="center" gap={12} data-testid="mem-header" style={{ fontSize: 13, width: '100%' }}>
       <span>{stats ? `项目 ${stats.project} · 全局 ${stats.global}` : '加载中…'}</span>
@@ -95,6 +109,7 @@ export function MemoryPanel() {
         ))}
       </Flexbox>
       <div style={{ flex: 1 }} />
+      <ActionIcon data-testid="mem-add" icon={Plus} size="small" title="手动添加" onClick={() => void onAdd()} />
       <ActionIcon
         data-testid="mem-clear"
         icon={Trash2}
@@ -161,7 +176,16 @@ export function MemoryPanel() {
         <span>category：{selected.category ?? '（无）'}</span>
         <span>时间：{formatTime(selected.createdAt)}</span>
       </Flexbox>
-      <Flexbox horizontal>
+      <Flexbox horizontal gap={6}>
+        {selected.scope === 'project' && (
+          <ActionIcon
+            data-testid="mem-promote"
+            icon={ArrowUp}
+            size="small"
+            title="提升为全局"
+            onClick={() => void onPromote()}
+          />
+        )}
         <ActionIcon
           data-testid="mem-delete"
           icon={Trash2}
