@@ -1,25 +1,88 @@
-import { ActionIcon, Flexbox } from '@lobehub/ui';
+import { Flexbox } from '@lobehub/ui';
 import { openPath } from '@tauri-apps/plugin-opener';
-import { ExternalLink } from 'lucide-react';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState } from 'react';
 import { useAgentStoreContext } from '../../stores/AgentStoreContext';
 import { pi, type ImageItem } from '../../lib/pi';
-import { ManagerLayout } from '../common/ManagerLayout';
 
 const muted = 'var(--gren-fg-muted, #9aa1ac)';
 const border = '1px solid var(--gren-border, rgba(255,255,255,0.08))';
 
-function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+function formatTime(ms: number): string {
+  if (!ms) return '';
+  try {
+    return new Date(ms).toLocaleString();
+  } catch {
+    return String(ms);
+  }
+}
+
+function ImageCard({ workspace, item }: { workspace: string; item: ImageItem }) {
+  const [src, setSrc] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    void pi
+      .createImage(workspace, item.name)
+      .then((b64) => {
+        if (alive) setSrc(`data:image/png;base64,${b64}`);
+      })
+      .catch(() => {
+        if (alive) setSrc(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [workspace, item.name]);
+
+  return (
+    <button
+      data-testid={`cr-card-${item.name}`}
+      title="打开原图"
+      onClick={() => void openPath(item.name)}
+      style={{
+        border,
+        borderRadius: 10,
+        overflow: 'hidden',
+        cursor: 'pointer',
+        background: 'var(--gren-bg-1, #16181c)',
+        padding: 0,
+        textAlign: 'left',
+        color: 'inherit',
+      }}
+    >
+      <div
+        style={{
+          height: 96,
+          background: 'var(--gren-bg-2, #1e2127)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        {src ? (
+          <img
+            data-testid={`cr-thumb-${item.name}`}
+            src={src}
+            alt={item.name}
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          />
+        ) : (
+          <span style={{ fontSize: 11, color: muted }}>加载…</span>
+        )}
+      </div>
+      <div style={{ padding: '7px 9px' }}>
+        <div style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {item.name}
+        </div>
+        <div style={{ fontSize: 11, color: muted, marginBlockStart: 2 }}>{formatTime(item.modifiedMs)}</div>
+      </div>
+    </button>
+  );
 }
 
 export function CreatePanel() {
   const { workspace } = useAgentStoreContext();
   const [items, setItems] = useState<ImageItem[]>([]);
-  const [selected, setSelected] = useState<string | null>(null);
-  const [preview, setPreview] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -38,104 +101,35 @@ export function CreatePanel() {
     };
   }, [workspace]);
 
-  useEffect(() => {
-    if (!selected) {
-      setPreview(null);
-      return;
-    }
-    let alive = true;
-    setPreview(null);
-    void pi
-      .createImage(workspace, selected)
-      .then((b64) => {
-        if (alive) setPreview(`data:image/png;base64,${b64}`);
-      })
-      .catch(() => {
-        if (alive) setPreview(null);
-      });
-    return () => {
-      alive = false;
-    };
-  }, [workspace, selected]);
-
-  const header = (
-    <Flexbox horizontal align="center" gap={12} data-testid="cr-header" style={{ fontSize: 13 }}>
-      <span>{items.length} 张图片</span>
-    </Flexbox>
-  );
-
-  let list: ReactNode;
-  if (error) {
-    list = <div style={{ padding: 14, fontSize: 12, color: muted }}>读取失败：{error}</div>;
-  } else if (items.length === 0) {
-    list = (
-      <div data-testid="cr-empty" style={{ padding: 14, fontSize: 12, color: muted }}>
-        暂无生成的图片
+  return (
+    <Flexbox data-testid="create-panel" style={{ height: '100%', minHeight: 0 }}>
+      <div style={{ padding: '10px 14px', borderBottom: border, flex: '0 0 auto', fontSize: 13 }}>
+        <span data-testid="cr-header">{items.length} 张图片</span>
       </div>
-    );
-  } else {
-    list = (
-      <Flexbox>
-        {items.map((it) => {
-          const active = it.name === selected;
-          return (
-            <button
-              key={it.name}
-              data-testid={`cr-item-${it.name}`}
-              onClick={() => setSelected(it.name)}
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 2,
-                padding: '8px 12px',
-                border: 'none',
-                borderBottom: border,
-                cursor: 'pointer',
-                textAlign: 'left',
-                background: active
-                  ? 'var(--gren-rail-active, rgba(255,255,255,0.08))'
-                  : 'transparent',
-                color: 'inherit',
-                fontSize: 12,
-              }}
-            >
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {it.name}
-              </span>
-              <span style={{ color: muted, fontSize: 11 }}>{formatBytes(it.bytes)}</span>
-            </button>
-          );
-        })}
-      </Flexbox>
-    );
-  }
-
-  const detail = selected ? (
-    <Flexbox gap={10} data-testid="cr-detail">
-      <Flexbox horizontal align="center" gap={8}>
-        <span style={{ fontSize: 13 }}>{selected}</span>
-        <ActionIcon
-          data-testid="cr-open"
-          icon={ExternalLink}
-          size="small"
-          title="打开原图"
-          onClick={() => void openPath(selected)}
-        />
-      </Flexbox>
-      {preview ? (
-        <img
-          data-testid="cr-preview"
-          src={preview}
-          alt={selected}
-          style={{ maxWidth: '100%', borderRadius: 8, border }}
-        />
+      {error ? (
+        <div style={{ padding: 14, fontSize: 12, color: muted }}>读取失败：{error}</div>
+      ) : items.length === 0 ? (
+        <div data-testid="cr-empty" style={{ padding: 14, fontSize: 12, color: muted }}>
+          暂无生成的图片
+        </div>
       ) : (
-        <div style={{ color: muted, fontSize: 12 }}>加载预览…</div>
+        <div
+          style={{
+            flex: 1,
+            minHeight: 0,
+            overflowY: 'auto',
+            padding: 14,
+            display: 'grid',
+            gridTemplateColumns: 'repeat(3, 1fr)',
+            gap: 12,
+            alignContent: 'start',
+          }}
+        >
+          {items.map((it) => (
+            <ImageCard key={it.name} workspace={workspace} item={it} />
+          ))}
+        </div>
       )}
     </Flexbox>
-  ) : (
-    <div style={{ color: muted, fontSize: 13 }}>选择左侧图片查看预览</div>
   );
-
-  return <ManagerLayout testId="create-panel" header={header} list={list} detail={detail} />;
 }

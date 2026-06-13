@@ -26,21 +26,26 @@ afterEach(() => {
 });
 
 describe('CreatePanel', () => {
-  it('lists images', async () => {
+  it('lists images as gallery cards', async () => {
     render(<CreatePanel />);
     await waitFor(() => expect(screen.getByTestId('cr-header').textContent).toContain('2'));
-    expect(screen.getByTestId('cr-item-img_2.png')).toBeTruthy();
-    expect(screen.getByTestId('cr-item-img_1.png')).toBeTruthy();
+    expect(screen.getByTestId('cr-card-img_2.png')).toBeTruthy();
+    expect(screen.getByTestId('cr-card-img_1.png')).toBeTruthy();
   });
 
-  it('loads base64 preview when an image is selected', async () => {
+  it('loads base64 thumbnails', async () => {
     render(<CreatePanel />);
-    await waitFor(() => expect(screen.getByTestId('cr-item-img_1.png')).toBeTruthy());
-    fireEvent.click(screen.getByTestId('cr-item-img_1.png'));
     await waitFor(() => expect(createImage).toHaveBeenCalledWith('/ws', 'img_1.png'));
     await waitFor(() => {
-      const img = screen.getByTestId('cr-preview') as HTMLImageElement;
+      const img = screen.getByTestId('cr-thumb-img_1.png') as HTMLImageElement;
       expect(img.getAttribute('src')).toContain('data:image/png;base64,QUJD');
     });
+  });
+
+  it('opens original image on card click', async () => {
+    render(<CreatePanel />);
+    await waitFor(() => expect(screen.getByTestId('cr-card-img_1.png')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('cr-card-img_1.png'));
+    expect(openPath).toHaveBeenCalledWith('img_1.png');
   });
 });
