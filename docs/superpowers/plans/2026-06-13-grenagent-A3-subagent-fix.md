@@ -15,6 +15,7 @@
 - ✅ **任务 3**（settingsSchema 加 `PI_BIN`）：提交 `56bd3b7`，前端 `tsc --noEmit` 退出 0。
 - ◐ **任务 5**（端到端冒烟）：重建 ✓、print 模式实跑 ✓（等价验证子代理链路）。**待用户在 GrenAgent app 内确认**：① `--mode rpc` 连接未回归（代码层已验证：官方 `main.js` 路由 `appMode==="rpc" → runRpcMode`）；② app 内触发 `spawn_agent` 工具实跑。
 - ⊘ **任务 4**（Rust 注入 PI_BIN）：**跳过（YAGNI）**。`process.execPath` 兜底 + print 实跑已证明二进制可被子代理调用；如后续 app 冒烟发现需显式控制再补。
+- 🔧 **后续修复（用户 GUI 反馈：子代理一直加载/超时）**：根因是 **print 模式会读 piped stdin，而 runner spawn 子进程未关闭 stdin → 子进程阻塞等 EOF、永不执行任务**（A3 验证时用 `$null |` 关 stdin 掩盖了它）。修 `stdio:["ignore","pipe","pipe"]` + 子代理轻量化（spawn 时禁 `KB_AUTO_INJECT`/`MEMORY_AUTO_INJECT`/`MEMORY_AUTO_CAPTURE`/`MEMORY_EXTRACT`/`MCP_SERVERS`，避免每个子代理重跑 embedding/重连 MCP/递归）。命令行实测：超时 → **6.6s 返回**。提交 `fa39740`。
 
 > 下方为原始计划步骤（复选框保留为原始拆解；实际完成情况以本节为准）。
 

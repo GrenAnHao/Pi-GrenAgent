@@ -22,7 +22,8 @@ A5 全部 6 任务完成，逐任务提交：
 **技术 gate 全通过**（用户最关心）：`@modelcontextprotocol/sdk` 能被 `bun --compile` 打包；stdio 子进程在编译二进制内 spawn 成功。
 **实现中修的 bug**：连接超时未清理 transport → stdio 子进程泄漏 / 进程不退出 → 已加 `client.close()` 清理。
 **待用户 app 内**：ConnectionsPanel MCP 区渲染 + 配置真实 server 在 GUI 调用。
-**YAGNI 未做**：OAuth、StreamableHTTP、per-session 生命周期、sidecar→前端实时状态通道。
+**后续修复（用户 GUI 反馈）**：① 配置改标准 `mcpServers` 包裹格式（兼容 `.cursor/mcp.json` / Claude Desktop；仍兼容裸 map）；② **实时连接状态**：mcp extension 经 `setStatus("mcp", JSON)` 推送 → `mcpStatusStore` → ConnectionsPanel 每个 server 显示 ● 已连/工具数 / ○ 失败 / 待连接。
+**YAGNI 未做**：OAuth、StreamableHTTP、per-session 生命周期。
 
 > 下方为原始计划步骤（复选框保留为原始拆解；实际完成情况以本节为准）。
 
