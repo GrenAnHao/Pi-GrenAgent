@@ -85,6 +85,9 @@ export const pi = {
   switchSession: (workspace: string, sessionPath: string) =>
     invoke<unknown>('agent_switch_session', { workspace, sessionPath }),
   listSessions: (workspace: string) => invoke<SessionInfo[]>('list_pi_sessions', { workspace }),
+  listAllSessions: () => invoke<SessionInfo[]>('list_all_sessions'),
+  setSessionName: (workspace: string, name: string) =>
+    invoke<unknown>('agent_set_session_name', { workspace, name }),
   deleteSession: (workspace: string, sessionPath: string) =>
     invoke<void>('delete_pi_session', { workspace, sessionPath }),
   respondUi: (workspace: string, response: Record<string, unknown>) =>
