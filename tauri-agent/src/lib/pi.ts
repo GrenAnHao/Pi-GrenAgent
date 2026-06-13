@@ -154,6 +154,8 @@ export const pi = {
     invoke<void>('set_settings', { settings }),
   runCommand: (workspace: string, command: string) =>
     invoke<unknown>('agent_prompt', { workspace, message: command }),
+  getGitDiff: (workspace: string, file: string) =>
+    invoke<string>('get_git_diff', { workspacePath: workspace, filePath: file }),
 };
 
 export interface SessionInfo {

@@ -5,7 +5,7 @@ vi.mock('../../stores/AgentStoreContext', () => ({
   useAgentStoreContext: () => ({ workspace: '/ws' }),
 }));
 
-const { rvList, runCommand, prompt } = vi.hoisted(() => ({
+const { rvList, runCommand, prompt, getGitDiff } = vi.hoisted(() => ({
   rvList: vi.fn(() =>
     Promise.resolve([
       { id: 'n1', file: 'a.ts', line: 10, severity: 'major', message: 'bug here', createdAt: 100 },
@@ -14,8 +14,9 @@ const { rvList, runCommand, prompt } = vi.hoisted(() => ({
   ),
   runCommand: vi.fn(() => Promise.resolve()),
   prompt: vi.fn(() => Promise.resolve()),
+  getGitDiff: vi.fn(() => Promise.resolve('@@ -1 +1 @@\n-one\n+two')),
 }));
-vi.mock('../../lib/pi', () => ({ pi: { rvList, runCommand, prompt } }));
+vi.mock('../../lib/pi', () => ({ pi: { rvList, runCommand, prompt, getGitDiff } }));
 
 import { ReviewPanel } from './ReviewPanel';
 
@@ -54,5 +55,13 @@ describe('ReviewPanel', () => {
     await waitFor(() => expect(screen.getByTestId('rv-agent')).toBeTruthy());
     fireEvent.click(screen.getByTestId('rv-agent'));
     await waitFor(() => expect(prompt).toHaveBeenCalled());
+  });
+
+  it('loads file diff in detail when a finding is selected', async () => {
+    render(<ReviewPanel />);
+    await waitFor(() => expect(screen.getByTestId('rv-note-n1')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('rv-note-n1'));
+    await waitFor(() => expect(getGitDiff).toHaveBeenCalledWith('/ws', 'a.ts'));
+    await waitFor(() => expect(screen.getByTestId('rv-diff').textContent).toContain('two'));
   });
 });

@@ -22,6 +22,7 @@ export function ReviewPanel() {
   const [notes, setNotes] = useState<ReviewNote[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [diff, setDiff] = useState<string>('');
 
   const reload = useCallback(() => {
     setError(null);
@@ -49,6 +50,25 @@ export function ReviewPanel() {
     () => notes.find((n) => n.id === selectedId) ?? null,
     [notes, selectedId],
   );
+
+  useEffect(() => {
+    if (!selected) {
+      setDiff('');
+      return;
+    }
+    let alive = true;
+    void pi
+      .getGitDiff(workspace, selected.file)
+      .then((d) => {
+        if (alive) setDiff(d);
+      })
+      .catch(() => {
+        if (alive) setDiff('');
+      });
+    return () => {
+      alive = false;
+    };
+  }, [workspace, selected]);
 
   const onClear = useCallback(async () => {
     if (!window.confirm('确定清空审查发现？')) return;
@@ -152,6 +172,24 @@ export function ReviewPanel() {
           {selected.line != null ? `:${selected.line}` : ''}
         </span>
       </Flexbox>
+      {diff && (
+        <pre
+          data-testid="rv-diff"
+          style={{
+            fontFamily: 'ui-monospace, monospace',
+            fontSize: 12,
+            whiteSpace: 'pre-wrap',
+            border,
+            borderRadius: 8,
+            padding: 10,
+            color: muted,
+            maxHeight: 240,
+            overflow: 'auto',
+          }}
+        >
+          {diff}
+        </pre>
+      )}
     </Flexbox>
   ) : (
     <div style={{ color: muted, fontSize: 13 }}>选择左侧发现查看详情</div>
