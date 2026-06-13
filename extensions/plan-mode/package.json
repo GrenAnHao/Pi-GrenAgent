@@ -1,0 +1,21 @@
+{
+  "name": "pi-plan-mode",
+  "version": "0.1.0",
+  "description": "Read-only plan mode for the Pi coding agent (tool gating + numbered plan/step tracking).",
+  "private": true,
+  "type": "module",
+  "keywords": ["pi-package", "pi-extension", "plan-mode"],
+  "license": "MIT",
+  "pi": {
+    "extensions": ["./index.ts"]
+  },
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-agent-core": "*",
+    "vitest": "^4.1.8"
+  }
+}
