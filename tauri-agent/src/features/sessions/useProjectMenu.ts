@@ -1,7 +1,7 @@
 import type { MenuProps } from 'antd';
 import { createElement } from 'react';
 import { Icon } from '@lobehub/ui';
-import { EyeOff, FolderOpen, PencilLine, Pin, PinOff } from 'lucide-react';
+import { EyeOff, FolderOpen, PencilLine, Pin, PinOff, Trash2 } from 'lucide-react';
 
 export interface ProjectMenuParams {
   pinned: boolean;
@@ -9,6 +9,7 @@ export interface ProjectMenuParams {
   onReveal: () => void; // 在资源管理器中打开
   onRename: () => void; // 重命名（别名）
   onHide: () => void; // 从列表隐藏
+  onRemove: () => void; // 移除项目（清空其全部对话，不删真实目录）
 }
 
 type Items = NonNullable<MenuProps['items']>;
@@ -38,8 +39,14 @@ export function buildProjectMenuItems(p: ProjectMenuParams): Items {
       key: 'hide',
       icon: createElement(Icon, { icon: EyeOff, size: 'small' }),
       label: '从列表隐藏',
-      danger: true,
       onClick: p.onHide,
+    },
+    {
+      key: 'remove',
+      icon: createElement(Icon, { icon: Trash2, size: 'small' }),
+      label: '移除项目（清空对话）',
+      danger: true,
+      onClick: p.onRemove,
     },
   ];
 }

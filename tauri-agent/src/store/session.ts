@@ -27,7 +27,7 @@ export const useSessionStore = create<SessionStore>((set) => ({
   sessions: [],
   allSessions: [],
   worksDir: '',
-  activeWorkspace: '.',
+  activeWorkspace: '',
   activeSessionPath: null,
   searchKeyword: '',
   isLoading: false,

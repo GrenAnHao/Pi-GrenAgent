@@ -1,18 +1,33 @@
 import { useCallback, useMemo, useState, memo } from 'react';
 import { ActionIcon, Empty, Flexbox, Text } from '@lobehub/ui';
+import { Dropdown } from 'antd';
 import { createStaticStyles, cssVar } from 'antd-style';
-import { PanelLeftClose } from 'lucide-react';
+import { FolderPlus, MessageSquarePlus, PanelLeftClose } from 'lucide-react';
 import { openPath } from '@tauri-apps/plugin-opener';
 import { PanelHeader } from '../../components/PanelHeader';
 import { useSessionStore } from '../../store/session';
 import { useSidebarPrefsStore } from '../../stores/sidebarPrefsStore';
 import { useProjectGroups, type ProjectGroup as Group } from './useProjectGroups';
+import { useConversations } from './useConversations';
 import { SidebarActions } from './SidebarActions';
 import { ProjectGroup } from './ProjectGroup';
+import { SessionItem } from './SessionItem';
 
 const styles = createStaticStyles(({ css }) => ({
   sec: css`
     padding: 12px 14px 4px;
+    color: ${cssVar.colorTextTertiary};
+    font-size: 10px;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+  `,
+  secRow: css`
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 8px 4px 14px;
+  `,
+  secLabel: css`
     color: ${cssVar.colorTextTertiary};
     font-size: 10px;
     letter-spacing: 0.09em;
@@ -28,9 +43,13 @@ const styles = createStaticStyles(({ css }) => ({
 
 export interface SidebarProps {
   runningSessionPath: string | null;
+  onNewConversation: () => void;
+  onOpenProject: () => void;
   onNewSession: (cwd: string) => void;
   onOpenSession: (cwd: string, path: string) => void;
   onDeleteSession: (cwd: string, path: string) => void;
+  onDeleteConversation: (cwd: string) => void;
+  onRemoveProject: (cwd: string) => void;
   onSubmitRename: (cwd: string, path: string, name: string) => void;
   onToggleSidebar: () => void;
 }
@@ -43,6 +62,7 @@ interface GroupListProps {
   onNewSession: (cwd: string) => void;
   onOpenSession: (cwd: string, path: string) => void;
   onDeleteSession: (cwd: string, path: string) => void;
+  onRemoveProject: (cwd: string) => void;
   onSubmitRename: (cwd: string, path: string, name: string) => void;
   onRequestRename: (path: string) => void;
 }
@@ -55,6 +75,7 @@ const GroupList = memo(function GroupList({
   onNewSession,
   onOpenSession,
   onDeleteSession,
+  onRemoveProject,
   onSubmitRename,
   onRequestRename,
 }: GroupListProps) {
@@ -98,6 +119,7 @@ const GroupList = memo(function GroupList({
             if (next !== null) setAlias(cwd, next);
           }}
           onHideProject={hideProject}
+          onRemoveProject={onRemoveProject}
           onOpenSession={onOpenSession}
           onPinSession={togglePinnedSession}
           onRequestRename={onRequestRename}
@@ -112,8 +134,8 @@ const GroupList = memo(function GroupList({
 
 export const Sidebar = memo(function Sidebar(props: SidebarProps) {
   const groups = useProjectGroups();
+  const conversations = useConversations();
   const activeSessionPath = useSessionStore((s) => s.activeSessionPath);
-  const activeWorkspace = useSessionStore((s) => s.activeWorkspace);
   const isLoading = useSessionStore((s) => s.isLoading);
   const allSessionsLoading = useSessionStore((s) => s.allSessionsLoading);
   const [renamingPath, setRenamingPath] = useState<string | null>(null);
@@ -147,10 +169,24 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     onNewSession: props.onNewSession,
     onOpenSession: props.onOpenSession,
     onDeleteSession: props.onDeleteSession,
+    onRemoveProject: props.onRemoveProject,
     onSubmitRename: handleSubmitRename,
     onRequestRename: handleRequestRename,
     groups: [],
   };
+
+  const newProjectMenu = {
+    items: [
+      { key: 'blank', label: '新建空白项目' },
+      { key: 'existing', label: '使用现有文件夹' },
+    ],
+    onClick: () => props.onOpenProject(),
+  };
+
+  const showLoading =
+    (isLoading || allSessionsLoading) && groups.length === 0 && conversations.length === 0;
+  const showEmpty =
+    !isLoading && !allSessionsLoading && groups.length === 0 && conversations.length === 0;
 
   return (
     <Flexbox height="100%" style={{ minHeight: 0, background: 'var(--gren-sidebar-bg, transparent)' }}>
@@ -158,21 +194,52 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
         title="Pi Agent"
         actions={<ActionIcon icon={PanelLeftClose} title="收起" onClick={props.onToggleSidebar} />}
       />
-      <SidebarActions onNew={() => props.onNewSession(activeWorkspace)} />
+      <SidebarActions />
       <div className={styles.scroll}>
-        {(isLoading || allSessionsLoading) && groups.length === 0 && (
+        {showLoading && (
           <Flexbox align="center" justify="center" style={{ padding: 24 }}>
             <Text type="secondary" style={{ fontSize: 12 }}>
               加载会话…
             </Text>
           </Flexbox>
         )}
-        {!isLoading && !allSessionsLoading && groups.length === 0 && (
-          <Empty description="暂无会话" />
-        )}
+        {showEmpty && <Empty description="暂无对话或项目" />}
+
+        <div className={styles.secRow}>
+          <span className={styles.secLabel}>对话</span>
+          <ActionIcon
+            icon={MessageSquarePlus}
+            size="small"
+            title="新建对话 (Ctrl+Alt+N)"
+            onClick={props.onNewConversation}
+          />
+        </div>
+        {conversations.map((c) => (
+          <SessionItem
+            key={c.cwd}
+            title={c.name}
+            active={activeSessionPath === c.sessionPath}
+            running={props.runningSessionPath === c.sessionPath}
+            pinned={false}
+            editing={renamingPath === c.sessionPath}
+            onClick={() => props.onOpenSession(c.cwd, c.sessionPath)}
+            onPinToggle={() => {}}
+            onRequestRename={() => setRenamingPath(c.sessionPath)}
+            onRename={(name) => handleSubmitRename(c.cwd, c.sessionPath, name)}
+            onDelete={() => props.onDeleteConversation(c.cwd)}
+          />
+        ))}
+
+        <div className={styles.secRow}>
+          <span className={styles.secLabel}>项目</span>
+          <Dropdown menu={newProjectMenu} trigger={['click']}>
+            <span>
+              <ActionIcon icon={FolderPlus} size="small" title="新建项目" />
+            </span>
+          </Dropdown>
+        </div>
         {pinnedGroups.length > 0 && <div className={styles.sec}>置顶</div>}
         <GroupList {...listProps} groups={pinnedGroups} />
-        {normalGroups.length > 0 && <div className={styles.sec}>项目</div>}
         <GroupList {...listProps} groups={normalGroups} />
       </div>
     </Flexbox>

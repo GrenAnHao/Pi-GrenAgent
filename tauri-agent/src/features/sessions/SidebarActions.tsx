@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Icon } from '@lobehub/ui';
 import { createStaticStyles, cssVar } from 'antd-style';
-import { MessageSquarePlus, Search } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { useSessionStore } from '../../store/session';
 import { SearchBox } from './SearchBox';
 
@@ -28,11 +28,7 @@ const styles = createStaticStyles(({ css }) => ({
   `,
 }));
 
-interface SidebarActionsProps {
-  onNew: () => void;
-}
-
-export function SidebarActions({ onNew }: SidebarActionsProps) {
+export function SidebarActions() {
   const [searching, setSearching] = useState(false);
   const setKeyword = useSessionStore((s) => s.setSearchKeyword);
 
@@ -43,13 +39,12 @@ export function SidebarActions({ onNew }: SidebarActionsProps) {
 
   return (
     <div className={styles.wrap}>
-      <div className={styles.act} onClick={onNew}>
-        <Icon icon={MessageSquarePlus} size="small" /> 新建会话
-      </div>
       {searching ? (
-        <div onBlur={(e) => {
-          if (!e.currentTarget.contains(e.relatedTarget as Node)) closeSearch();
-        }}>
+        <div
+          onBlur={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget as Node)) closeSearch();
+          }}
+        >
           <SearchBox />
         </div>
       ) : (

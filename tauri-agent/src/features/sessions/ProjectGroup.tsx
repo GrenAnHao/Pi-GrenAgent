@@ -37,6 +37,7 @@ export interface ProjectGroupProps {
   onRevealProject: (cwd: string) => void;
   onRenameProject: (cwd: string) => void;
   onHideProject: (cwd: string) => void;
+  onRemoveProject: (cwd: string) => void;
   onOpenSession: (cwd: string, path: string) => void;
   onPinSession: (path: string) => void;
   onRequestRename: (path: string) => void;
@@ -64,6 +65,7 @@ export const ProjectGroup = memo(function ProjectGroup(p: ProjectGroupProps) {
         onReveal={() => p.onRevealProject(g.cwd)}
         onRename={() => p.onRenameProject(g.cwd)}
         onHide={() => p.onHideProject(g.cwd)}
+        onRemove={() => p.onRemoveProject(g.cwd)}
       />
       {p.expanded &&
         visible.map((s) => (

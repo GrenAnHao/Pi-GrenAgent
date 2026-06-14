@@ -16,9 +16,10 @@ import { RightPanelShell, SidebarShell, TerminalShell } from './features/layout/
 import { ModuleRail } from './features/layout/ModuleRail';
 import { ModuleContainer } from './features/workspace/ModuleContainer';
 import { FullscreenLoading } from './components/FullscreenLoading';
-import { pi, type OpenWorkspaceResult } from './lib/pi';
+import { onPiEvent, pi, type OpenWorkspaceResult } from './lib/pi';
+import { pickDirectory } from './lib/dialog';
 import { createStartupPerf } from './lib/startupPerf';
-import { pathsEquivalent } from './lib/pathUtils';
+import { isUnder, pathsEquivalent } from './lib/pathUtils';
 import {
   getAllSessionsInflight,
   getCachedAllSessions,
@@ -27,8 +28,7 @@ import {
   setCachedAllSessions,
 } from './lib/sessionCache';
 
-// 初始工作区。activeWorkspace 由 sessionStore 维护，切项目时更新。
-const INITIAL_WORKSPACE = '.';
+// 初始工作区由 App 启动时解析（恢复最近会话所属 cwd，否则新建对话）。
 
 /** 拉取并刷新当前工作区的会话列表。 */
 async function refreshSessions(
@@ -115,15 +115,23 @@ const MainChatColumn = memo(function MainChatColumn() {
 
 const SidebarPanel = memo(function SidebarPanel({
   runningSessionPath,
+  onNewConversation,
+  onOpenProject,
   onNewSession,
   onOpenSession,
   onDeleteSession,
+  onDeleteConversation,
+  onRemoveProject,
   onSubmitRename,
 }: {
   runningSessionPath: string | null;
+  onNewConversation: () => void;
+  onOpenProject: () => void;
   onNewSession: (cwd: string) => void;
   onOpenSession: (cwd: string, path: string) => void;
   onDeleteSession: (cwd: string, path: string) => void;
+  onDeleteConversation: (cwd: string) => void;
+  onRemoveProject: (cwd: string) => void;
   onSubmitRename: (cwd: string, path: string, name: string) => void;
 }) {
   const toggleSidebar = useLayoutStore((s) => s.toggleSidebar);
@@ -132,9 +140,13 @@ const SidebarPanel = memo(function SidebarPanel({
     <SidebarShell>
       <Sidebar
         runningSessionPath={runningSessionPath}
+        onNewConversation={onNewConversation}
+        onOpenProject={onOpenProject}
         onNewSession={onNewSession}
         onOpenSession={onOpenSession}
         onDeleteSession={onDeleteSession}
+        onDeleteConversation={onDeleteConversation}
+        onRemoveProject={onRemoveProject}
         onSubmitRename={onSubmitRename}
         onToggleSidebar={toggleSidebar}
       />
@@ -171,6 +183,10 @@ function Workspace() {
     const perf = createStartupPerf(workspace);
 
     void (async () => {
+      if (!workspace) {
+        useSessionStore.getState().setLoading(false);
+        return;
+      }
       setWorkspaceReady(false);
       useSessionStore.getState().setLoading(true);
 
@@ -280,6 +296,94 @@ function Workspace() {
     void refreshAllSessions(true);
   }, [switchProject]);
 
+  const goToSafeWorkspace = useCallback(async () => {
+    await refreshAllSessions(true);
+    const all = useSessionStore.getState().allSessions;
+    const next = all[0]?.cwd;
+    const st = useSessionStore.getState();
+    st.setActiveSession('');
+    if (next) {
+      st.setActiveWorkspace(next);
+    } else {
+      const { cwd } = await pi.createConversation();
+      st.setActiveWorkspace(cwd);
+    }
+  }, []);
+
+  const handleNewConversation = useCallback(async () => {
+    const { cwd } = await pi.createConversation();
+    invalidateAllSessionsCache();
+    const st = useSessionStore.getState();
+    st.setActiveSession('');
+    st.setActiveWorkspace(cwd);
+    void refreshAllSessions(true);
+  }, []);
+
+  const handleOpenProject = useCallback(async () => {
+    const dir = await pickDirectory();
+    if (!dir) return;
+    const st = useSessionStore.getState();
+    st.setActiveSession('');
+    st.setActiveWorkspace(dir);
+    void refreshAllSessions(true);
+  }, []);
+
+  const handleDeleteConversation = useCallback(
+    async (cwd: string) => {
+      await pi.deleteConversation(cwd);
+      invalidateAllSessionsCache();
+      if (useSessionStore.getState().activeWorkspace === cwd) {
+        await goToSafeWorkspace();
+      } else {
+        void refreshAllSessions(true);
+      }
+    },
+    [goToSafeWorkspace],
+  );
+
+  const handleRemoveProject = useCallback(
+    async (cwd: string) => {
+      await pi.removeProject(cwd);
+      invalidateAllSessionsCache();
+      if (useSessionStore.getState().activeWorkspace === cwd) {
+        await goToSafeWorkspace();
+      } else {
+        void refreshAllSessions(true);
+      }
+    },
+    [goToSafeWorkspace],
+  );
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.altKey && (e.key === 'n' || e.key === 'N')) {
+        e.preventDefault();
+        void handleNewConversation();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [handleNewConversation]);
+
+  useEffect(() => {
+    let un: (() => void) | undefined;
+    void onPiEvent((e) => {
+      if (e.event.type !== 'agent_end') return;
+      const ws = e.workspace;
+      if (!isUnder(ws, useSessionStore.getState().worksDir)) return;
+      void (async () => {
+        const title = await pi.autoTitleSession(ws);
+        if (title) {
+          invalidateAllSessionsCache();
+          void refreshAllSessions(true);
+        }
+      })();
+    }).then((f) => {
+      un = f;
+    });
+    return () => un?.();
+  }, []);
+
   const runningSessionPath = isStreaming ? activeSessionPath : null;
 
   return (
@@ -293,9 +397,13 @@ function Workspace() {
               <Flexbox horizontal flex={1} style={{ minHeight: 0, height: '100%' }}>
                 <SidebarPanel
                   runningSessionPath={runningSessionPath}
+                  onNewConversation={handleNewConversation}
+                  onOpenProject={handleOpenProject}
                   onNewSession={handleNewSession}
                   onOpenSession={handleOpenSession}
                   onDeleteSession={handleDeleteSession}
+                  onDeleteConversation={handleDeleteConversation}
+                  onRemoveProject={handleRemoveProject}
                   onSubmitRename={handleSubmitRename}
                 />
                 <Flexbox flex={1} style={{ minWidth: 0, height: '100%' }}>
@@ -320,7 +428,29 @@ export default function App() {
   const activeWorkspace = useSessionStore((s) => s.activeWorkspace);
 
   useEffect(() => {
-    useSessionStore.getState().setActiveWorkspace(INITIAL_WORKSPACE);
+    void (async () => {
+      try {
+        const wd = await pi.getWorksDir();
+        useSessionStore.getState().setWorksDir(wd);
+      } catch {
+        /* ignore */
+      }
+      let ws = '';
+      try {
+        const all = await pi.listAllSessions();
+        ws = all[0]?.cwd ?? '';
+      } catch {
+        /* ignore */
+      }
+      if (!ws) {
+        try {
+          ws = (await pi.createConversation()).cwd;
+        } catch {
+          /* ignore */
+        }
+      }
+      if (ws) useSessionStore.getState().setActiveWorkspace(ws);
+    })();
     return () => {
       void pi.closeWorkspace(useSessionStore.getState().activeWorkspace);
     };

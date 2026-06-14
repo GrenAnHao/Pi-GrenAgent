@@ -44,17 +44,18 @@ describe('buildSessionMenuItems', () => {
 });
 
 describe('buildProjectMenuItems', () => {
-  it('has pin/reveal/rename/hide and hide is danger', () => {
+  it('has pin/reveal/rename/hide/remove and remove is danger', () => {
     const items = buildProjectMenuItems({
       pinned: false,
       onPinToggle: vi.fn(),
       onReveal: vi.fn(),
       onRename: vi.fn(),
       onHide: vi.fn(),
+      onRemove: vi.fn(),
     }) as ClickItem[];
     const keys = items.map((i) => i.key).filter(Boolean);
-    expect(keys).toEqual(['pin', 'reveal', 'rename', 'hide']);
-    expect(items.find((i) => i.key === 'hide')!.danger).toBe(true);
+    expect(keys).toEqual(['pin', 'reveal', 'rename', 'hide', 'remove']);
+    expect(items.find((i) => i.key === 'remove')!.danger).toBe(true);
   });
 
   it('reveal fires its callback', () => {
@@ -65,6 +66,7 @@ describe('buildProjectMenuItems', () => {
       onReveal,
       onRename: vi.fn(),
       onHide: vi.fn(),
+      onRemove: vi.fn(),
     }) as ClickItem[];
     items.find((i) => i.key === 'reveal')!.onClick!();
     expect(onReveal).toHaveBeenCalledOnce();
