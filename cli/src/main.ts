@@ -25,15 +25,20 @@ import {
 import { allExtensions } from "../../extensions/index.js";
 
 // On shutdown the parent (Tauri) closes the stdio/RPC pipe; in-flight writes then
-// fail with EPIPE. Without a stream 'error' listener these surface as
-// uncaughtExceptions and flood pi's runtime-failure guard → "degraded mode" →
-// the sidecar lingers instead of exiting. Handle EPIPE on the std streams and
-// exit cleanly: a broken pipe means the parent is gone, so there's nothing to do.
-function onPipeError(err: NodeJS.ErrnoException): void {
+// fail with EPIPE. A broken pipe means the parent is gone, so the sidecar should
+// just exit cleanly.
+function onPipeError(err: NodeJS.ErrnoException | undefined): void {
   if (err?.code === "EPIPE") process.exit(0);
 }
 process.stdout.on("error", onPipeError);
 process.stderr.on("error", onPipeError);
+// EPIPE also arrives as an uncaughtException/rejection when a synchronous write
+// hits the dead pipe. pi's runtime-failure guard catches those and keeps running,
+// so it re-writes to the broken pipe forever and floods stderr (tens of thousands
+// of "EPIPE: broken pipe" lines). Registered here at module load — before pi sets
+// up its own guard — so we exit on the very first EPIPE instead of looping.
+process.on("uncaughtException", onPipeError);
+process.on("unhandledRejection", (reason) => onPipeError(reason as NodeJS.ErrnoException));
 
 function isRpcMode(argv: string[]): boolean {
   const i = argv.indexOf("--mode");
