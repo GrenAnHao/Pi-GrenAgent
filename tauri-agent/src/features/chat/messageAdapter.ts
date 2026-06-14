@@ -33,16 +33,34 @@ export interface OrphanToolExtra {
 
 export type ChatExtra = AssistantGroupExtra | NoticeExtra | OrphanToolExtra;
 
+const NOW = () => Date.now();
+
+// lobe-ui ChatList.ChatMessage extends BaseDataModel — `meta` / `createAt` / `updateAt` 是必需字段。
+// 即使 ChatList showAvatar=false，meta 仍要存在，ChatList 内部会把 meta 透给 ChatItem 的 `avatar` prop。
+const USER_META = { avatar: '🧑', title: 'You' };
+const ASSISTANT_META = { avatar: '🤖', title: 'Assistant' };
+const SYSTEM_META = { avatar: '✨', title: 'System' };
+
 export function toLobeMessages(messages: DisplayMessage[]): LobeChatMessage[] {
+  const ts = NOW();
   return messages.map((msg): LobeChatMessage => {
+    const base = { createAt: ts, updateAt: ts };
     switch (msg.kind) {
       case 'user':
-        return { id: msg.id, role: 'user', content: msg.text } as LobeChatMessage;
+        return {
+          ...base,
+          id: msg.id,
+          role: 'user',
+          content: msg.text,
+          meta: USER_META,
+        } as LobeChatMessage;
       case 'assistantGroup':
         return {
+          ...base,
           id: msg.id,
           role: 'assistant',
           content: msg.text,
+          meta: ASSISTANT_META,
           extra: {
             kind: 'assistantGroup',
             thinking: msg.thinking,
@@ -53,9 +71,11 @@ export function toLobeMessages(messages: DisplayMessage[]): LobeChatMessage[] {
         } as LobeChatMessage;
       case 'notice':
         return {
+          ...base,
           id: msg.id,
           role: 'system',
           content: msg.content,
+          meta: SYSTEM_META,
           extra: {
             kind: 'notice',
             customType: msg.customType,
@@ -64,9 +84,11 @@ export function toLobeMessages(messages: DisplayMessage[]): LobeChatMessage[] {
         } as LobeChatMessage;
       case 'tool':
         return {
+          ...base,
           id: msg.id,
           role: 'system',
           content: '',
+          meta: SYSTEM_META,
           extra: {
             kind: 'orphanTool',
             toolCallId: msg.toolCallId,

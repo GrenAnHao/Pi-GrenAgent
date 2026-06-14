@@ -3,10 +3,18 @@ import { toLobeMessages } from './messageAdapter';
 import type { DisplayMessage } from './groupMessages';
 
 describe('toLobeMessages', () => {
-  it('user → role:user', () => {
+  it('user → role:user + meta（含默认头像/标题元数据）', () => {
     const input: DisplayMessage[] = [{ kind: 'user', id: 'u1', text: 'hi' }];
     const out = toLobeMessages(input);
-    expect(out).toEqual([{ id: 'u1', role: 'user', content: 'hi' }]);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({
+      id: 'u1',
+      role: 'user',
+      content: 'hi',
+      meta: { title: 'You' },
+    });
+    expect(typeof out[0].createAt).toBe('number');
+    expect(typeof out[0].updateAt).toBe('number');
   });
 
   it('assistantGroup → role:assistant + extra.kind=assistantGroup + tools 数组', () => {

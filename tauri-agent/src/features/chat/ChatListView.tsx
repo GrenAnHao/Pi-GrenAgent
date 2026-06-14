@@ -33,7 +33,6 @@ export function ChatListView({ bottomOffset = 88 }: ChatListViewProps) {
     <ChatList
       data={lobeMessages as any}
       variant="bubble"
-      loading={isStreaming}
       style={{ position: 'absolute', inset: 0, paddingBottom: bottomOffset }}
       renderMessages={
         {
