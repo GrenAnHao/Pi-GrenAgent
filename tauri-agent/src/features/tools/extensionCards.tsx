@@ -147,7 +147,8 @@ const SpawnAgentCard: FC<ExtensionCardProps> = ({ result }) => {
 const FetchUrlCard: FC<ExtensionCardProps> = ({ result }) => {
   const d = getDetails(result);
   const url = asString(d?.url);
-  const status = d?.status;
+  // New crawler reports which provider succeeded; fall back to legacy status code.
+  const meta = asString(d?.crawler) || (d?.status != null ? asString(d?.status) : '');
   const text = extractText(result);
   return (
     <Flexbox gap={6} data-testid="card-fetch_url">
@@ -155,10 +156,15 @@ const FetchUrlCard: FC<ExtensionCardProps> = ({ result }) => {
         <Flexbox horizontal align="center" gap={6}>
           <Icon icon={Globe} size={14} />
           <span style={{ fontSize: 12 }}>{url}</span>
-          {status != null && <span style={labelStyle}>{asString(status)}</span>}
+          {meta ? <span style={labelStyle}>{meta}</span> : null}
         </Flexbox>
       ) : null}
-      {text ? <LazyMarkdown>{text}</LazyMarkdown> : null}
+      {text ? (
+        // 限高 + 滚动：超长抓取正文不再霸屏对话流。
+        <div style={{ maxHeight: 'min(50vh, 360px)', overflowY: 'auto' }}>
+          <LazyMarkdown>{text}</LazyMarkdown>
+        </div>
+      ) : null}
     </Flexbox>
   );
 };

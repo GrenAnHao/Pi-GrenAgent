@@ -267,9 +267,13 @@ const search1api: CrawlImpl = async (url, { signal }) => {
 
 const ALL_IMPLS: Record<string, CrawlImpl> = { naive, jina, firecrawl, exa, search1api };
 
-/** Impls usable in this environment: naive + jina always; keyed ones only with their key. */
+/**
+ * Impls usable in this environment, in fallback order. jina first (clean reader
+ * extraction, matches lobe's default) so content-heavy pages don't come back as
+ * raw nav/menu junk; naive as keyless fallback; keyed providers only with a key.
+ */
 export function availableImpls(): string[] {
-  const list = ['naive', 'jina'];
+  const list = ['jina', 'naive'];
   if (process.env.FIRECRAWL_API_KEY) list.push('firecrawl');
   if (process.env.EXA_API_KEY) list.push('exa');
   if (process.env.SEARCH1API_CRAWL_API_KEY || process.env.SEARCH1API_API_KEY) list.push('search1api');
@@ -281,7 +285,12 @@ export class Crawler {
 
   constructor(impls?: string[]) {
     const avail = availableImpls();
-    this.impls = impls?.length ? impls.filter((i) => avail.includes(i)) : avail;
+    // Allow ordering/selection override via CRAWL_IMPLS="naive,jina" etc.
+    const envImpls = process.env.CRAWL_IMPLS?.split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const requested = impls?.length ? impls : envImpls;
+    this.impls = requested?.length ? requested.filter((i) => avail.includes(i)) : avail;
   }
 
   async crawl(opts: {
