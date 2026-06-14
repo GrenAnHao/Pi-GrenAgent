@@ -1,17 +1,25 @@
-import { ChatList } from '@lobehub/ui/chat';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
+import { createStaticStyles } from 'antd-style';
 import { useAgentStore } from '../../stores/AgentStoreContext';
 import { useThrottledValue } from '../../hooks/useThrottledValue';
 import { groupMessages } from './groupMessages';
-import {
-  toLobeMessages,
-  type AssistantGroupExtra,
-  type NoticeExtra,
-  type OrphanToolExtra,
-} from './messageAdapter';
-import { UserMessage } from './UserMessage';
-import { AssistantMessage } from './AssistantMessage';
-import { NoticePill } from './NoticePill';
+import { ChatMessageItems } from './ChatMessageItems';
+
+const styles = createStaticStyles(({ css }) => ({
+  scroll: css`
+    position: absolute;
+    inset: 0;
+    overflow-y: auto;
+  `,
+  list: css`
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-width: 768px;
+    margin: 0 auto;
+    padding: 16px 24px;
+  `,
+}));
 
 interface ChatListViewProps {
   bottomOffset?: number;
@@ -22,46 +30,35 @@ export function ChatListView({ bottomOffset = 88 }: ChatListViewProps) {
   const messages = useStore((s) => s.messages);
   const isStreaming = useStore((s) => s.isStreaming);
 
-  // streaming 中 100ms 节流，避免每 token 触发 ChatList 重算（详见 useThrottledValue 契约）。
+  // streaming 中 100ms 节流，避免每 token 触发整列重算（详见 useThrottledValue 契约）。
   const throttledMessages = useThrottledValue(messages, 100, { enabled: isStreaming });
-  const lobeMessages = useMemo(
-    () => toLobeMessages(groupMessages(throttledMessages)),
-    [throttledMessages],
-  );
+  const display = useMemo(() => groupMessages(throttledMessages), [throttledMessages]);
+
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const atBottomRef = useRef(true);
+
+  const handleScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    atBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight <= 120;
+  };
+
+  // 新内容到达后，仅当用户停留在底部时跟随滚底（对齐 SubAgentConversation 的 atBottom 模式）。
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el && atBottomRef.current) el.scrollTop = el.scrollHeight;
+  });
 
   return (
-    <ChatList
-      data={lobeMessages as any}
-      variant="bubble"
-      style={{ position: 'absolute', inset: 0, paddingBottom: bottomOffset }}
-      renderMessages={
-        {
-          // lobe-ui renderMessages 是 FC<ChatMessage & { editableContent }>，单 props 参数。
-          user: (props: any) => <UserMessage key={props.id} text={props.content} />,
-          assistant: (props: any) => {
-            const extra = props.extra as AssistantGroupExtra | undefined;
-            return (
-              <AssistantMessage
-                key={props.id}
-                text={props.content}
-                thinking={extra?.thinking ?? ''}
-                streaming={extra?.streaming ?? false}
-                thinkingDuration={extra?.thinkingDuration}
-                tools={extra && extra.tools.length > 0 ? extra.tools : undefined}
-              />
-            );
-          },
-          system: (props: any) => {
-            const extra = props.extra as NoticeExtra | OrphanToolExtra | undefined;
-            if (extra?.kind === 'notice') {
-              return (
-                <NoticePill key={props.id} customType={extra.customType} content={extra.content} />
-              );
-            }
-            return null;
-          },
-        } as any
-      }
-    />
+    <div
+      ref={scrollRef}
+      className={styles.scroll}
+      onScroll={handleScroll}
+      data-testid="chat-scroll"
+    >
+      <div className={styles.list} style={{ paddingBottom: bottomOffset }}>
+        <ChatMessageItems messages={display} />
+      </div>
+    </div>
   );
 }
