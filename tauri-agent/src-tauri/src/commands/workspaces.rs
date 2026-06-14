@@ -128,6 +128,20 @@ pub async fn delete_conversation(
     Ok(())
 }
 
+/// FR-5：移除一个项目——仅清空其会话与应用记录，绝不删除真实目录。
+#[tauri::command]
+pub async fn remove_project(
+    workspace: String,
+    mgr: State<'_, Arc<PiManager>>,
+    store: State<'_, AppStateStore>,
+) -> Result<(), String> {
+    mgr.close(&workspace).await;
+    delete_sessions_for_cwd(&workspace)?;
+    let ws = workspace.clone();
+    store.update(|st| st.forget_workspace(&ws)).await;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
