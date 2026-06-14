@@ -3,6 +3,8 @@ import { ChatInput } from './ChatInput';
 import type { PromptImage } from './input/ChatInputContext';
 import { pi } from '../../lib/pi';
 import { useAgentStoreContext } from '../../stores/AgentStoreContext';
+import { commandLanes } from '../../lib/commandLanes';
+import { awaitStreamingEnd } from '../../lib/streamingGate';
 
 export function ChatView() {
   const { workspace, store } = useAgentStoreContext();
@@ -12,7 +14,11 @@ export function ChatView() {
     if (!text && !images?.length) return;
     // pi 不会回发用户消息，发送前主动加入以乐观显示用户气泡。
     if (text) store.pushUserMessage(text);
-    await pi.prompt(workspace, text, undefined, images);
+    // 经两级 Lane：同会话串行 + 全局并发上限；占住并发槽直到本会话流式结束。
+    await commandLanes.run(workspace, async () => {
+      await pi.prompt(workspace, text, undefined, images);
+      await awaitStreamingEnd(store.useStore);
+    });
   };
 
   const handleAbort = async () => {
