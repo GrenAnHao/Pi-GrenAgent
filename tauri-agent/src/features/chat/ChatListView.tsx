@@ -36,27 +36,26 @@ export function ChatListView({ bottomOffset = 88 }: ChatListViewProps) {
       style={{ position: 'absolute', inset: 0, paddingBottom: bottomOffset }}
       renderMessages={
         {
-          user: (_default: unknown, item: any) => (
-            <UserMessage key={item.id} text={item.content} />
-          ),
-          assistant: (_default: unknown, item: any) => {
-            const extra = item.extra as AssistantGroupExtra;
+          // lobe-ui renderMessages 是 FC<ChatMessage & { editableContent }>，单 props 参数。
+          user: (props: any) => <UserMessage key={props.id} text={props.content} />,
+          assistant: (props: any) => {
+            const extra = props.extra as AssistantGroupExtra | undefined;
             return (
               <AssistantMessage
-                key={item.id}
-                text={item.content}
-                thinking={extra.thinking}
-                streaming={extra.streaming}
-                thinkingDuration={extra.thinkingDuration}
-                tools={extra.tools.length > 0 ? extra.tools : undefined}
+                key={props.id}
+                text={props.content}
+                thinking={extra?.thinking ?? ''}
+                streaming={extra?.streaming ?? false}
+                thinkingDuration={extra?.thinkingDuration}
+                tools={extra && extra.tools.length > 0 ? extra.tools : undefined}
               />
             );
           },
-          system: (_default: unknown, item: any) => {
-            const extra = item.extra as NoticeExtra | OrphanToolExtra;
+          system: (props: any) => {
+            const extra = props.extra as NoticeExtra | OrphanToolExtra | undefined;
             if (extra?.kind === 'notice') {
               return (
-                <NoticePill key={item.id} customType={extra.customType} content={extra.content} />
+                <NoticePill key={props.id} customType={extra.customType} content={extra.content} />
               );
             }
             return null;
