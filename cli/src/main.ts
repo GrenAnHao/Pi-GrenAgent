@@ -24,6 +24,17 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { allExtensions } from "../../extensions/index.js";
 
+// On shutdown the parent (Tauri) closes the stdio/RPC pipe; in-flight writes then
+// fail with EPIPE. Without a stream 'error' listener these surface as
+// uncaughtExceptions and flood pi's runtime-failure guard → "degraded mode" →
+// the sidecar lingers instead of exiting. Handle EPIPE on the std streams and
+// exit cleanly: a broken pipe means the parent is gone, so there's nothing to do.
+function onPipeError(err: NodeJS.ErrnoException): void {
+  if (err?.code === "EPIPE") process.exit(0);
+}
+process.stdout.on("error", onPipeError);
+process.stderr.on("error", onPipeError);
+
 function isRpcMode(argv: string[]): boolean {
   const i = argv.indexOf("--mode");
   return i >= 0 && argv[i + 1] === "rpc";
