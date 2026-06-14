@@ -1,10 +1,11 @@
+import { memo } from 'react';
 import { ChatItem } from '@lobehub/ui/chat';
 
 interface UserMessageProps {
   text: string;
 }
 
-export function UserMessage({ text }: UserMessageProps) {
+function UserMessageInner({ text }: UserMessageProps) {
   return (
     <ChatItem
       placement="right"
@@ -16,3 +17,5 @@ export function UserMessage({ text }: UserMessageProps) {
     />
   );
 }
+
+export const UserMessage = memo(UserMessageInner);

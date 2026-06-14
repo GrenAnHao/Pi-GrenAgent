@@ -1,6 +1,6 @@
 import { Collapse, Flexbox, Icon } from '@lobehub/ui';
 import { Sparkles } from 'lucide-react';
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { LazyMarkdown } from './LazyMarkdown';
 
 const TITLES: Record<string, string> = {
@@ -13,7 +13,7 @@ interface NoticePillProps {
   content: string;
 }
 
-export function NoticePill({ customType, content }: NoticePillProps) {
+function NoticePillInner({ customType, content }: NoticePillProps) {
   const [expanded, setExpanded] = useState(false);
   const title = TITLES[customType] ?? '已注入上下文';
 
@@ -43,3 +43,5 @@ export function NoticePill({ customType, content }: NoticePillProps) {
     </div>
   );
 }
+
+export const NoticePill = memo(NoticePillInner);
