@@ -74,6 +74,11 @@ export const useCardStyles = createStyles(({ css, cssVar }) => ({
     padding-inline-start: 4px;
     max-width: 100%;
   `,
+  divDash: css`
+    margin-block-start: 8px;
+    border: none;
+    border-block-start: 1px dashed ${cssVar.colorBorder};
+  `,
   queryHighlight: css`
     padding: 0 1px;
     color: ${cssVar.colorText};

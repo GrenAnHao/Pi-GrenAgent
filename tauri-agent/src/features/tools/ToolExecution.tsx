@@ -1,4 +1,4 @@
-import { Block, Collapse, Flexbox, Icon } from '@lobehub/ui';
+import { Accordion, AccordionItem, Block, Flexbox, Icon } from '@lobehub/ui';
 import { cssVar } from 'antd-style';
 import { ChevronRight, Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
@@ -256,35 +256,46 @@ export function ToolExecution({ toolName, args, result, status }: ToolExecutionP
     return Boolean(extractText(result) || getDiff(result) || stringifyJson(result));
   }, [result, status]);
 
+  const inspector = (
+    <ToolInspector toolName={toolName} args={args} result={result} status={status} />
+  );
+
   if (!hasDetail && status !== 'running') {
+    // 无可展开详情：仅一行 Inspector（不显示展开箭头）。
     return (
-      <Flexbox className={styles.toolRow} gap={4}>
-        <ToolInspector toolName={toolName} args={args} result={result} status={status} />
-      </Flexbox>
+      <div className={styles.toolRow}>
+        <Accordion disableAnimation gap={4} variant="borderless" expandedKeys={[]}>
+          <AccordionItem
+            allowExpand={false}
+            hideIndicator
+            itemKey="tool"
+            paddingBlock={4}
+            paddingInline={4}
+            title={inspector}
+          />
+        </Accordion>
+      </div>
     );
   }
 
   return (
     <div className={styles.toolRow}>
-      <Collapse
-        variant="outlined"
+      <Accordion
+        disableAnimation
         gap={4}
-        expandIconPosition="end"
-        activeKey={expanded ? ['tool'] : []}
-        onChange={(keys) => {
-          const arr = Array.isArray(keys) ? keys : [keys];
-          setExpanded(arr.includes('tool'));
-        }}
-        items={[
-          {
-            key: 'tool',
-            label: <ToolInspector toolName={toolName} args={args} result={result} status={status} />,
-            children: expanded ? (
+        variant="borderless"
+        expandedKeys={expanded ? ['tool'] : []}
+        onExpandedChange={(keys) => setExpanded(keys.includes('tool'))}
+      >
+        <AccordionItem itemKey="tool" paddingBlock={4} paddingInline={4} title={inspector}>
+          {expanded ? (
+            <Flexbox gap={8} paddingBlock={8}>
               <ToolDetail toolName={toolName} args={args} result={result} status={status} />
-            ) : null,
-          },
-        ]}
-      />
+              <div className={styles.divDash} />
+            </Flexbox>
+          ) : null}
+        </AccordionItem>
+      </Accordion>
     </div>
   );
 }
