@@ -18,6 +18,20 @@ fn works_dir() -> Option<std::path::PathBuf> {
     dirs::home_dir().map(|h| h.join(".pi").join("agent").join("works"))
 }
 
+/// 去掉 Windows 扩展长度前缀 `\\?\`（canonicalize 产物），返回普通路径。
+/// pi 进程报告的 session.cwd 是规范化的普通路径，前端据此做 isUnder/分组比较；
+/// 若这里返回 `\\?\` 前缀会与之不一致，且 PTY/git 对 `\\?\` 兼容性差。
+fn strip_verbatim(p: &std::path::Path) -> String {
+    let s = p.to_string_lossy().to_string();
+    if let Some(rest) = s.strip_prefix(r"\\?\UNC\") {
+        format!(r"\\{rest}")
+    } else if let Some(rest) = s.strip_prefix(r"\\?\") {
+        rest.to_string()
+    } else {
+        s
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ConversationInfo {
@@ -33,7 +47,7 @@ pub async fn create_conversation() -> Result<ConversationInfo, String> {
     std::fs::create_dir_all(&dir).map_err(|e| format!("create conversation dir failed: {e}"))?;
     let cwd = std::fs::canonicalize(&dir).map_err(|e| format!("canonicalize failed: {e}"))?;
     Ok(ConversationInfo {
-        cwd: cwd.to_string_lossy().to_string(),
+        cwd: strip_verbatim(&cwd),
     })
 }
 
@@ -43,7 +57,7 @@ pub async fn get_works_dir() -> Result<String, String> {
     let base = works_dir().ok_or("works directory unavailable")?;
     std::fs::create_dir_all(&base).map_err(|e| format!("create works dir failed: {e}"))?;
     let canon = std::fs::canonicalize(&base).map_err(|e| format!("canonicalize failed: {e}"))?;
-    Ok(canon.to_string_lossy().to_string())
+    Ok(strip_verbatim(&canon))
 }
 
 /// 删除 sessions/ 下所有 header.cwd 等价于 `cwd` 的 .jsonl，返回删除条数。
@@ -389,6 +403,13 @@ mod tests {
             .to_string_lossy()
             .replace('\\', "/")
             .contains(".pi/agent/works"));
+    }
+
+    #[test]
+    fn strip_verbatim_removes_windows_prefix() {
+        use std::path::Path;
+        assert_eq!(strip_verbatim(Path::new(r"\\?\C:\a\b")), r"C:\a\b");
+        assert_eq!(strip_verbatim(Path::new("/a/b")), "/a/b");
     }
 
     #[test]

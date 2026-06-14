@@ -16,11 +16,20 @@ describe('isUnder', () => {
     expect(isUnder('', '/a')).toBe(false);
     expect(isUnder('/a', '')).toBe(false);
   });
+
+  it('handles windows verbatim prefix mismatch', () => {
+    expect(isUnder('C:\\U\\works\\u1', '\\\\?\\C:\\U\\works')).toBe(true);
+    expect(isUnder('\\\\?\\C:\\U\\works\\u1', 'C:\\U\\works')).toBe(true);
+  });
 });
 
 describe('pathsEquivalent', () => {
   it('treats separators and case as equivalent', () => {
     expect(pathsEquivalent('C:\\ws\\a', 'c:/ws/a')).toBe(true);
     expect(pathsEquivalent('/ws/a/', '/ws/a')).toBe(true);
+  });
+
+  it('treats windows verbatim prefix as equivalent', () => {
+    expect(pathsEquivalent('\\\\?\\C:\\a', 'C:\\a')).toBe(true);
   });
 });
