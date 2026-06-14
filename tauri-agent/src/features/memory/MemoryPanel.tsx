@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import { useAgentStoreContext } from '../../stores/AgentStoreContext';
 import { pi, type MemItem, type MemStats } from '../../lib/pi';
 import { ManagerLayout } from '../common/ManagerLayout';
+import { MemoryHistory } from './MemoryHistory';
 
 const muted = 'var(--gren-fg-muted, #9aa1ac)';
 const border = '1px solid var(--gren-border, rgba(255,255,255,0.08))';
@@ -29,6 +30,7 @@ export function MemoryPanel() {
   const [stats, setStats] = useState<MemStats | null>(null);
   const [items, setItems] = useState<MemItem[]>([]);
   const [filter, setFilter] = useState<ScopeFilter>('all');
+  const [view, setView] = useState<'memories' | 'history'>('memories');
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -107,6 +109,38 @@ export function MemoryPanel() {
             {f.label}
           </button>
         ))}
+      </Flexbox>
+      <Flexbox horizontal gap={4}>
+        <button
+          data-testid="mem-view-memories"
+          onClick={() => setView('memories')}
+          style={{
+            padding: '2px 10px',
+            borderRadius: 6,
+            border,
+            cursor: 'pointer',
+            fontSize: 12,
+            background: view === 'memories' ? 'var(--gren-rail-active, rgba(255,255,255,0.08))' : 'transparent',
+            color: view === 'memories' ? 'var(--gren-fg, inherit)' : muted,
+          }}
+        >
+          记忆
+        </button>
+        <button
+          data-testid="mem-view-history"
+          onClick={() => setView('history')}
+          style={{
+            padding: '2px 10px',
+            borderRadius: 6,
+            border,
+            cursor: 'pointer',
+            fontSize: 12,
+            background: view === 'history' ? 'var(--gren-rail-active, rgba(255,255,255,0.08))' : 'transparent',
+            color: view === 'history' ? 'var(--gren-fg, inherit)' : muted,
+          }}
+        >
+          历史
+        </button>
       </Flexbox>
       <div style={{ flex: 1 }} />
       <ActionIcon data-testid="mem-add" icon={Plus} size="small" title="手动添加" onClick={() => void onAdd()} />
@@ -194,10 +228,22 @@ export function MemoryPanel() {
           onClick={() => void onDelete()}
         />
       </Flexbox>
+      <div style={{ marginBlockStart: 8, fontSize: 12, color: muted }}>版本历史</div>
+      <MemoryHistory memoryId={selected.id} />
     </Flexbox>
   ) : (
     <div style={{ color: muted, fontSize: 13 }}>选择左侧记忆查看详情</div>
   );
 
+  if (view === 'history') {
+    return (
+      <ManagerLayout
+        testId="memory-panel"
+        header={header}
+        list={<MemoryHistory />}
+        detail={<div style={{ color: muted, fontSize: 13 }}>全量变更时间线；点条目右侧可回滚</div>}
+      />
+    );
+  }
   return <ManagerLayout testId="memory-panel" header={header} list={list} detail={detail} />;
 }

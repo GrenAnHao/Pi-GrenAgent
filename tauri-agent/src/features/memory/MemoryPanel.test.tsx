@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const { memStats, memList, runCommand } = vi.hoisted(() => ({
+const { memStats, memList, memHistory, runCommand } = vi.hoisted(() => ({
   memStats: vi.fn(() => Promise.resolve({ project: 1, global: 1 })),
   memList: vi.fn(() =>
     Promise.resolve([
@@ -9,12 +9,13 @@ const { memStats, memList, runCommand } = vi.hoisted(() => ({
       { id: 'p1', text: 'project pref', category: 'preference', createdAt: 100, scope: 'project' },
     ]),
   ),
+  memHistory: vi.fn(() => Promise.resolve([])),
   runCommand: vi.fn(() => Promise.resolve()),
 }));
 vi.mock('../../stores/AgentStoreContext', () => ({
   useAgentStoreContext: () => ({ workspace: '/ws' }),
 }));
-vi.mock('../../lib/pi', () => ({ pi: { memStats, memList, runCommand } }));
+vi.mock('../../lib/pi', () => ({ pi: { memStats, memList, memHistory, runCommand } }));
 
 import { MemoryPanel } from './MemoryPanel';
 
