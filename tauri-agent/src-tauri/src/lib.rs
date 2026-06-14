@@ -81,6 +81,8 @@ pub fn run() {
             commands::memory::mem_stats,
             commands::memory::mem_list,
             commands::memory::mem_history,
+            commands::checkpoint::cp_list,
+            commands::checkpoint::cp_diff,
             commands::review::rv_list,
             commands::create::create_list,
             commands::create::create_image,
