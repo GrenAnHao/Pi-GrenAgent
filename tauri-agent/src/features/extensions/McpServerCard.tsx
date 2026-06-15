@@ -1,25 +1,22 @@
 import { Segmented, Switch } from 'antd';
 import { createStaticStyles, cssVar } from 'antd-style';
-import { ChevronDown, ChevronRight, PencilLine, SlidersHorizontal, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, PencilLine, RefreshCw, SlidersHorizontal, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { transportOf, type McpConfig } from './mcpConfig';
 import { getToolPerm, shortToolName, type Perm } from './mcpPolicy';
-
-export interface McpLiveStatus {
-  status: 'connecting' | 'connected' | 'failed';
-  tools: number;
-  toolNames?: string[];
-}
 
 interface McpServerCardProps {
   name: string;
   config: McpConfig;
   enabled: boolean;
-  live?: McpLiveStatus;
+  cachedTools?: string[];
+  probing?: boolean;
+  probeError?: string;
   policyRaw?: Record<string, unknown>;
   onToggle: (enabled: boolean) => void;
   onEdit: () => void;
   onDelete: () => void;
+  onProbe?: () => void;
   onPermChange?: (fullName: string, perm: Perm) => void;
   onOpenRules?: (fullName: string) => void;
 }
@@ -30,19 +27,18 @@ const PERM_OPTIONS = [
   { label: '禁用', value: 'disabled' },
 ];
 
-function dotColor(enabled: boolean, live?: McpLiveStatus): string {
-  if (!enabled || !live) return '#8a8f98';
-  if (live.status === 'connected') return '#3ddc84';
-  if (live.status === 'connecting') return '#f5a623';
-  return '#f5635b';
+function statusText(probing: boolean, probeError: string | undefined, count: number): string {
+  if (probing) return '探测中…';
+  if (probeError) return '连接失败';
+  if (count > 0) return `${count} 工具`;
+  return '未探测';
 }
 
-function statusLabel(enabled: boolean, live?: McpLiveStatus): string {
-  if (!enabled) return '已禁用';
-  if (!live) return '待连接';
-  if (live.status === 'connected') return `${live.tools} 工具`;
-  if (live.status === 'connecting') return '连接中…';
-  return '连接失败';
+function statusColor(probing: boolean, probeError: string | undefined, count: number): string {
+  if (probing) return '#f5a623';
+  if (probeError) return '#f5635b';
+  if (count > 0) return '#3ddc84';
+  return '#8a8f98';
 }
 
 const styles = createStaticStyles(({ css }) => ({
@@ -107,6 +103,20 @@ const styles = createStaticStyles(({ css }) => ({
     background: transparent;
     color: inherit;
     cursor: pointer;
+
+    &:disabled {
+      cursor: default;
+      opacity: 0.5;
+    }
+  `,
+  spin: css`
+    animation: mcp-probe-spin 0.9s linear infinite;
+
+    @keyframes mcp-probe-spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
   `,
   tools: css`
     border-block-start: 1px solid ${cssVar.colorBorderSecondary};
@@ -136,12 +146,11 @@ const styles = createStaticStyles(({ css }) => ({
 }));
 
 export function McpServerCard({
-  name, config, enabled, live, policyRaw = {},
-  onToggle, onEdit, onDelete, onPermChange, onOpenRules,
+  name, config, enabled, cachedTools = [], probing = false, probeError, policyRaw = {},
+  onToggle, onEdit, onDelete, onProbe, onPermChange, onOpenRules,
 }: McpServerCardProps) {
   const [expanded, setExpanded] = useState(false);
-  const color = dotColor(enabled, live);
-  const toolNames = live?.toolNames ?? [];
+  const color = statusColor(probing, probeError, cachedTools.length);
   return (
     <div className={styles.wrap} data-testid={`mcp-server-${name}`}>
       <div className={`${styles.card} ${enabled ? '' : styles.disabled}`}>
@@ -157,8 +166,18 @@ export function McpServerCard({
         <span className={styles.name}>{name}</span>
         <span className={styles.pill}>{transportOf(config)}</span>
         <span className={styles.grow} />
-        <span className={styles.status} style={{ color }}>{statusLabel(enabled, live)}</span>
+        <span className={styles.status} style={{ color }}>{statusText(probing, probeError, cachedTools.length)}</span>
         <span className={styles.ops}>
+          <button
+            type="button"
+            className={styles.iconbtn}
+            title="测试连接"
+            data-testid={`mcp-probe-${name}`}
+            disabled={probing}
+            onClick={onProbe}
+          >
+            <RefreshCw size={14} className={probing ? styles.spin : undefined} />
+          </button>
           <Switch size="small" checked={enabled} onChange={onToggle} data-testid={`mcp-toggle-${name}`} />
           <button type="button" className={styles.iconbtn} data-testid={`mcp-edit-${name}`} onClick={onEdit}>
             <PencilLine size={15} />
@@ -170,12 +189,10 @@ export function McpServerCard({
       </div>
       {expanded ? (
         <div className={styles.tools}>
-          {!enabled || !live || live.status !== 'connected' ? (
-            <div className={styles.hint}>连接后可查看并配置工具权限</div>
-          ) : toolNames.length === 0 ? (
-            <div className={styles.hint}>该 server 无工具</div>
+          {cachedTools.length === 0 ? (
+            <div className={styles.hint}>{probeError ? `连接失败：${probeError}` : '点右侧「测试连接」获取工具列表'}</div>
           ) : (
-            toolNames.map((full) => (
+            cachedTools.map((full) => (
               <div key={full} className={styles.toolRow} data-testid={`mcp-tool-${full}`}>
                 <span className={styles.toolName} title={full}>{shortToolName(full)}</span>
                 <Segmented
