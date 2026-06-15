@@ -78,6 +78,8 @@ interface MemoryRow {
   category: string | null;
   createdAt: number;
   embedding: Uint8Array | null;
+  lastUsedAt?: number | null;
+  useCount?: number | null;
 }
 
 export class MemoryStore {
@@ -125,6 +127,13 @@ export class MemoryStore {
     if (!has("version")) {
       this.database.exec("ALTER TABLE memories ADD COLUMN version INTEGER");
       this.database.exec("UPDATE memories SET version = 1 WHERE version IS NULL");
+    }
+    if (!has("lastUsedAt")) {
+      this.database.exec("ALTER TABLE memories ADD COLUMN lastUsedAt INTEGER");
+    }
+    if (!has("useCount")) {
+      this.database.exec("ALTER TABLE memories ADD COLUMN useCount INTEGER DEFAULT 0");
+      this.database.exec("UPDATE memories SET useCount = 0 WHERE useCount IS NULL");
     }
   }
 
@@ -465,7 +474,7 @@ export class MemoryStore {
       params.push(filters.to);
     }
     const sql =
-      "SELECT id, text, category, createdAt, embedding FROM memories" +
+      "SELECT id, text, category, createdAt, embedding, lastUsedAt, useCount FROM memories" +
       (where.length ? ` WHERE ${where.join(" AND ")}` : "");
     const rows = this.database.prepare(sql).all(...params) as unknown as MemoryRow[];
     if (!rows.length) return [];
