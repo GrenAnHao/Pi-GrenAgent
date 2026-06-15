@@ -51,6 +51,33 @@ export function parseMcpServers(json: string): McpServerConfig[] {
   return servers;
 }
 
+// 默认内置 open-webSearch（多引擎搜索 bing/baidu/sogou/csdn/掘金 + 文章抓取，零配置）。
+// OPEN_WEBSEARCH=0 关闭；用户在 MCP_SERVERS 自定义同名 server 时以用户配置为准。
+// Windows 需经 `cmd /c npx`（直接 spawn npx.cmd 在部分环境会失败），其余平台直接用 npx。
+export function injectDefaultServers(
+  servers: McpServerConfig[],
+  env: Record<string, string | undefined>,
+  platform: string,
+): McpServerConfig[] {
+  if ((env.OPEN_WEBSEARCH ?? "0") === "0") return servers;
+  if (servers.some((s) => s.name === "open-websearch")) return servers;
+  const isWin = platform === "win32";
+  return [
+    ...servers,
+    {
+      name: "open-websearch",
+      transport: "stdio",
+      command: isWin ? "cmd" : "npx",
+      args: isWin ? ["/c", "npx", "-y", "open-websearch@latest"] : ["-y", "open-websearch@latest"],
+      env: {
+        MODE: "stdio",
+        DEFAULT_SEARCH_ENGINE: env.OPEN_WEBSEARCH_ENGINE ?? "bing",
+        ALLOWED_SEARCH_ENGINES: env.OPEN_WEBSEARCH_ENGINES ?? "bing,baidu,sogou,csdn,juejin",
+      },
+    },
+  ];
+}
+
 export function sanitize(s: string): string {
   return s.replace(/[^a-zA-Z0-9_]/g, "_");
 }

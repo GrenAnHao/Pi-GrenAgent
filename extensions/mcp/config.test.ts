@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseMcpServers, sanitize } from "./config.js";
+import { injectDefaultServers, parseMcpServers, sanitize } from "./config.js";
 
 describe("parseMcpServers", () => {
   it("parses stdio servers (command present)", () => {
@@ -24,6 +24,41 @@ describe("parseMcpServers", () => {
   });
   it("skips entries without command or url", () => {
     expect(parseMcpServers('{"bad":{"foo":1}}')).toEqual([]);
+  });
+});
+
+describe("injectDefaultServers", () => {
+  it("does not inject by default (engines are built into web_search)", () => {
+    expect(injectDefaultServers([], {}, "win32")).toEqual([]);
+  });
+  it("appends open-websearch when OPEN_WEBSEARCH=1 (windows uses cmd /c npx)", () => {
+    const out = injectDefaultServers([], { OPEN_WEBSEARCH: "1" }, "win32");
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({
+      name: "open-websearch",
+      transport: "stdio",
+      command: "cmd",
+      args: ["/c", "npx", "-y", "open-websearch@latest"],
+    });
+    expect(out[0].env).toMatchObject({ MODE: "stdio", DEFAULT_SEARCH_ENGINE: "bing" });
+  });
+  it("uses npx directly on non-windows when enabled", () => {
+    expect(injectDefaultServers([], { OPEN_WEBSEARCH: "1" }, "linux")[0]).toMatchObject({
+      command: "npx",
+      args: ["-y", "open-websearch@latest"],
+    });
+  });
+  it("is disabled when OPEN_WEBSEARCH=0", () => {
+    expect(injectDefaultServers([], { OPEN_WEBSEARCH: "0" }, "win32")).toEqual([]);
+  });
+  it("does not duplicate when the user already configured open-websearch", () => {
+    const user = [{ name: "open-websearch", transport: "stdio" as const, command: "x" }];
+    expect(injectDefaultServers(user, { OPEN_WEBSEARCH: "1" }, "win32")).toEqual(user);
+  });
+  it("honors the OPEN_WEBSEARCH_ENGINE override", () => {
+    expect(injectDefaultServers([], { OPEN_WEBSEARCH: "1", OPEN_WEBSEARCH_ENGINE: "baidu" }, "linux")[0].env).toMatchObject({
+      DEFAULT_SEARCH_ENGINE: "baidu",
+    });
   });
 });
 
