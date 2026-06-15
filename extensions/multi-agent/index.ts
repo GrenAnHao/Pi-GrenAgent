@@ -6,6 +6,7 @@ import { Type } from "typebox";
 import { spawnPiAgent } from "./runner.js";
 import { normalizeTasks } from "./tasks.js";
 import { resolveProfile, profileToModel, profileToEnv, type ProfileInput } from "./capability.js";
+import { createWorktree, worktreeDiff } from "./worktree.js";
 import { getConfig } from "../_shared/runtime-config.js";
 
 const MAX_CONCURRENCY = 4;
@@ -67,33 +68,50 @@ export default function (pi: ExtensionAPI) {
       if (!list.length) throw new Error("provide `task` or `tasks`");
 
       const profile = resolveProfile(params.profile as ProfileInput | undefined);
-      if (profile.isolation && profile.isolation !== "process") {
-        throw new Error(
-          `isolation '${profile.isolation}' 尚未支持（worktree 规划于 P2、sandbox 于 P4）；当前仅支持 process`,
-        );
+      if (profile.isolation === "sandbox") {
+        throw new Error("isolation 'sandbox' 尚未支持（规划于 P4）；当前支持 process | worktree");
+      }
+      const wantWorktree = profile.isolation === "worktree";
+      if (wantWorktree && list.length !== 1) {
+        throw new Error("worktree 隔离仅支持单任务（不支持并行 tasks）");
       }
       const profileModel = profileToModel(profile, getConfig);
       const profileEnv = params.profile ? profileToEnv(profile) : {};
 
       if (list.length === 1) {
         const { task, model } = list[0];
-        const r = await spawnPiAgent(ctx.cwd, task, {
-          model: model ?? profileModel,
-          env: profileEnv,
-          signal: signal ?? undefined,
-          onUpdate: onUpdate
-            ? (u) =>
-                onUpdate({
-                  content: [{ type: "text", text: u.text }],
-                  details: { streaming: true, transcript: u.transcript },
-                })
-            : undefined,
-        });
-        if (!r.ok) throw new Error(`sub-agent failed (exit ${r.exitCode}): ${r.error ?? "unknown error"}`);
-        return {
-          content: [{ type: "text", text: r.output || "(no output)" }],
-          details: { exitCode: r.exitCode, transcript: r.transcript },
-        };
+        const wt = wantWorktree ? await createWorktree(ctx.cwd) : null;
+        if (wantWorktree && !wt && getConfig("ISOLATE_FALLBACK") !== "1") {
+          throw new Error(
+            "无法隔离：当前目录非 git 仓库或无提交。请改用非隔离档案、先 git init + 初始提交，或设 ISOLATE_FALLBACK=1 降级。",
+          );
+        }
+        const runCwd = wt?.dir ?? ctx.cwd;
+        try {
+          const r = await spawnPiAgent(runCwd, task, {
+            model: model ?? profileModel,
+            env: profileEnv,
+            signal: signal ?? undefined,
+            onUpdate: onUpdate
+              ? (u) =>
+                  onUpdate({
+                    content: [{ type: "text", text: u.text }],
+                    details: { streaming: true, transcript: u.transcript },
+                  })
+              : undefined,
+          });
+          if (!r.ok) throw new Error(`sub-agent failed (exit ${r.exitCode}): ${r.error ?? "unknown error"}`);
+          const diff = wt ? await worktreeDiff(wt.dir) : undefined;
+          const text = wt
+            ? `${r.output || "(no output)"}\n\n---\n### Diff (isolated worktree)\n\n${diff?.trim() ? "```diff\n" + diff + "\n```" : "(no file changes)"}`
+            : r.output || "(no output)";
+          return {
+            content: [{ type: "text", text }],
+            details: { exitCode: r.exitCode, transcript: r.transcript, isolated: !!wt, diff },
+          };
+        } finally {
+          if (wt) await wt.cleanup();
+        }
       }
 
       const results: Array<{ task: string; ok: boolean; output: string; error?: string }> = [];
