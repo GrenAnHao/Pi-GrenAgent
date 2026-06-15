@@ -1,7 +1,7 @@
 import { Flexbox, Icon } from '@lobehub/ui';
 import { createStyles } from 'antd-style';
 import { useState } from 'react';
-import { SETTINGS_SCHEMA, SETTING_GROUPS, type SettingCategory } from './settingsSchema';
+import { fieldEffect, SETTINGS_SCHEMA, SETTING_GROUPS, type SettingCategory } from './settingsSchema';
 import { SettingCard } from './SettingCard';
 import { SettingFieldInput } from './SettingField';
 import { useSettingsForm } from './useSettingsForm';
@@ -102,14 +102,20 @@ export function SettingsPanel() {
   const [activeId, setActiveId] = useState(SETTINGS_SCHEMA[0].id);
   const cat: SettingCategory = SETTINGS_SCHEMA.find((c) => c.id === activeId) ?? SETTINGS_SCHEMA[0];
   const sections = cat.sections ?? [{ title: '', fields: cat.fields ?? [] }];
+  // 是否存在需重启才生效的设置项（当前 schema 全为即时/热更新，故默认无重启按钮）。
+  const hasRestart = SETTINGS_SCHEMA.some((c) =>
+    (c.sections?.flatMap((s) => s.fields) ?? c.fields ?? []).some((f) => fieldEffect(f) === 'restart'),
+  );
 
   return (
     <Flexbox className={styles.root} data-testid="settings-panel">
       <div className={styles.header}>
-        <span className={styles.hint}>{loading ? '加载中…' : '设置（保存后自动重启 sidecar 生效）'}</span>
-        <button data-testid="set-save" onClick={() => void save()} disabled={saving} className={styles.saveBtn}>
-          {saving ? '保存中…' : '保存并重启'}
-        </button>
+        <span className={styles.hint}>{loading ? '加载中…' : '改动即时保存生效，无需重启'}</span>
+        {hasRestart ? (
+          <button data-testid="set-save" onClick={() => void save()} disabled={saving} className={styles.saveBtn}>
+            {saving ? '重启中…' : '重启生效'}
+          </button>
+        ) : null}
       </div>
       {error ? <div className={styles.errorBar}>{error}</div> : null}
       <div className={styles.body}>

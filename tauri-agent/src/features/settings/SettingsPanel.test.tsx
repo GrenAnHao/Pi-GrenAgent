@@ -53,13 +53,16 @@ describe('SettingsPanel', () => {
   );
 
   it(
-    'edits a field and saves',
+    'edits a field and autosaves without restart',
     async () => {
       render(<SettingsPanel />);
       await waitFor(() => expect(screen.getByTestId('set-field-titleModel')).toBeTruthy());
       fireEvent.change(screen.getByTestId('set-field-titleModel'), { target: { value: 'gpt-x' } });
-      fireEvent.click(screen.getByTestId('set-save'));
-      await waitFor(() => expect(setSettings).toHaveBeenCalledWith(expect.objectContaining({ titleModel: 'gpt-x' })));
+      await waitFor(
+        () => expect(setSettings).toHaveBeenCalledWith(expect.objectContaining({ titleModel: 'gpt-x' })),
+        { timeout: 3000 },
+      );
+      expect(closeWorkspace).not.toHaveBeenCalled();
     },
     T,
   );
