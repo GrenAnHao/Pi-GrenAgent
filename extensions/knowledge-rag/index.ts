@@ -15,10 +15,11 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { resolveEmbeddingConfig } from "./embedding.js";
 import { KnowledgeStore } from "./store.js";
+import { getConfig } from "../_shared/runtime-config.js";
 
 const MAX_RESULT_CHARS = 8000;
-const AUTO_INJECT = (process.env.KB_AUTO_INJECT ?? "1") !== "0";
-const AUTO_INJECT_TOPK = Number(process.env.KB_AUTO_TOPK ?? "3") || 3;
+const autoInject = () => (getConfig("KB_AUTO_INJECT") ?? "1") !== "0";
+const autoInjectTopK = () => Number(getConfig("KB_AUTO_TOPK") ?? "3") || 3;
 const AUTO_INJECT_MAX_CHARS = 6000;
 
 export default function (pi: ExtensionAPI) {
@@ -41,13 +42,13 @@ export default function (pi: ExtensionAPI) {
   // Auto-RAG: retrieve relevant snippets for the user's prompt and inject them
   // as extra context before the agent loop runs. Toggle off with KB_AUTO_INJECT=0.
   pi.on("before_agent_start", async (event, ctx) => {
-    if (!AUTO_INJECT) return undefined;
+    if (!autoInject()) return undefined;
     const prompt = typeof event.prompt === "string" ? event.prompt.trim() : "";
     if (!prompt) return undefined;
 
     const kb = ensureStore(ctx.cwd);
     const config = resolveEmbeddingConfig();
-    const hits = await kb.search(prompt, AUTO_INJECT_TOPK, config).catch(() => []);
+    const hits = await kb.search(prompt, autoInjectTopK(), config).catch(() => []);
     if (!hits.length) return undefined;
 
     let body = "";

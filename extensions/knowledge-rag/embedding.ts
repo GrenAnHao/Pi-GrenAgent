@@ -3,6 +3,8 @@
 // configured the store transparently falls back to keyword search, so the
 // extension always works out of the box.
 
+import { getConfig } from "../_shared/runtime-config.js";
+
 export interface EmbeddingConfig {
   enabled: boolean;
   baseUrl: string;
@@ -11,13 +13,13 @@ export interface EmbeddingConfig {
 }
 
 export function resolveEmbeddingConfig(): EmbeddingConfig {
-  const apiKey = process.env.KB_EMBED_API_KEY ?? process.env.OPENAI_API_KEY ?? "";
-  const baseUrl = (process.env.KB_EMBED_BASE_URL ?? "https://api.openai.com/v1").replace(/\/+$/, "");
+  const apiKey = getConfig("KB_EMBED_API_KEY") ?? getConfig("OPENAI_API_KEY") ?? "";
+  const baseUrl = (getConfig("KB_EMBED_BASE_URL") ?? "https://api.openai.com/v1").replace(/\/+$/, "");
   return {
     enabled: apiKey.length > 0,
     baseUrl,
     apiKey,
-    model: process.env.KB_EMBED_MODEL ?? "text-embedding-3-small",
+    model: getConfig("KB_EMBED_MODEL") ?? "text-embedding-3-small",
   };
 }
 
