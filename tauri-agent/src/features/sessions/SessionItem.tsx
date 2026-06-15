@@ -92,6 +92,7 @@ export const SessionItem = memo(function SessionItem(props: SessionItemProps) {
     onDelete,
   } = props;
   const [draft, setDraft] = useState(title);
+  const [hovered, setHovered] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -124,15 +125,14 @@ export const SessionItem = memo(function SessionItem(props: SessionItemProps) {
     );
   }
 
-  const menuItems = buildSessionMenuItems({
-    pinned,
-    onPinToggle,
-    onRename: onRequestRename,
-    onDelete,
-  });
-
   return (
-    <div className={cx('pi-session-row', styles.row, active && styles.active)} onClick={onClick}>
+    <div
+      className={cx('pi-session-row', styles.row, active && styles.active)}
+      onClick={onClick}
+      onMouseEnter={() => {
+        if (!hovered) setHovered(true);
+      }}
+    >
       <span className={styles.title}>{title}</span>
       {running && (
         <span data-testid="session-running" className={styles.spin}>
@@ -140,7 +140,16 @@ export const SessionItem = memo(function SessionItem(props: SessionItemProps) {
         </span>
       )}
       <span className={styles.acts}>
-        <RowActions menuItems={menuItems} />
+        {hovered && (
+          <RowActions
+            menuItems={buildSessionMenuItems({
+              pinned,
+              onPinToggle,
+              onRename: onRequestRename,
+              onDelete,
+            })}
+          />
+        )}
       </span>
     </div>
   );
