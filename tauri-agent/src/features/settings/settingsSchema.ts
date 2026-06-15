@@ -1,7 +1,7 @@
 import { AudioLines, BookOpen, Boxes, Brain, Cpu, Globe, Image, Palette, Settings2, ShieldCheck } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
-export type FieldType = 'text' | 'password' | 'number' | 'boolean' | 'select' | 'model';
+export type FieldType = 'text' | 'password' | 'number' | 'boolean' | 'select' | 'model' | 'capability';
 export type SettingGroup = '核心' | '能力' | '联网' | '扩展与安全';
 
 export const SETTING_GROUPS: SettingGroup[] = ['核心', '能力', '联网', '扩展与安全'];
@@ -15,13 +15,17 @@ export interface SelectOption {
 export type SettingEffect = 'instant' | 'hot' | 'restart';
 
 export interface SettingField {
-  key: string; // env 名（不变）
+  key: string; // env 名（不变）；capability 类型时此为「供应商」env 名
   label: string;
   type: FieldType;
   description?: string;
   placeholder?: string;
   options?: SelectOption[];
   effect?: SettingEffect; // 省略＝hot
+  /** capability 类型：模型 env 名（供应商存 key、模型存 modelKey） */
+  modelKey?: string;
+  /** capability 类型：能力种类，决定模型建议清单 */
+  capability?: 'image' | 'embedding' | 'tts';
 }
 
 export interface SettingSection {
@@ -84,15 +88,14 @@ export const SETTINGS_SCHEMA: SettingCategory[] = [
     fields: [
       { key: 'KB_AUTO_INJECT', label: '自动注入', type: 'boolean', description: '检索到的知识自动注入上下文' },
       { key: 'KB_AUTO_TOPK', label: '自动注入条数', type: 'number', placeholder: '3', description: '每次注入的知识块上限' },
-      { key: 'KB_EMBED_API_KEY', label: 'Embedding API Key', type: 'password', description: '向量化所用密钥' },
       {
-        key: 'KB_EMBED_BASE_URL',
-        label: 'Embedding Base URL',
-        type: 'text',
-        placeholder: 'https://api.openai.com/v1',
-        description: 'OpenAI 兼容端点',
+        key: 'KB_EMBED_PROVIDER',
+        modelKey: 'KB_EMBED_MODEL',
+        capability: 'embedding',
+        type: 'capability',
+        label: 'Embedding 模型',
+        description: '供应商 + 模型；密钥取自供应商库',
       },
-      { key: 'KB_EMBED_MODEL', label: 'Embedding 模型', type: 'text', placeholder: 'text-embedding-3-small' },
     ],
   },
   {
@@ -118,12 +121,13 @@ export const SETTINGS_SCHEMA: SettingCategory[] = [
             description: '用户说“记住：…”时自动保存',
           },
           {
-            key: 'MEMORY_EMBED_API_KEY',
-            label: 'Embedding API Key',
-            type: 'password',
-            description: '语义召回所用密钥；留空则降级关键词召回',
+            key: 'MEMORY_EMBED_PROVIDER',
+            modelKey: 'MEMORY_EMBED_MODEL',
+            capability: 'embedding',
+            type: 'capability',
+            label: '记忆 Embedding 模型',
+            description: '供应商 + 模型；留空则降级关键词召回',
           },
-          { key: 'MEMORY_EMBED_MODEL', label: 'Embedding 模型', type: 'text', placeholder: 'text-embedding-3-small' },
         ],
       },
       {
@@ -159,9 +163,14 @@ export const SETTINGS_SCHEMA: SettingCategory[] = [
     group: '能力',
     icon: Image,
     fields: [
-      { key: 'IMAGE_API_KEY', label: 'Image API Key', type: 'password' },
-      { key: 'IMAGE_BASE_URL', label: 'Base URL', type: 'text', placeholder: 'https://api.openai.com/v1' },
-      { key: 'IMAGE_MODEL', label: '模型', type: 'text', placeholder: 'gpt-image-1' },
+      {
+        key: 'IMAGE_PROVIDER',
+        modelKey: 'IMAGE_MODEL',
+        capability: 'image',
+        type: 'capability',
+        label: '图像模型',
+        description: '供应商 + 模型；密钥取自供应商库',
+      },
       { key: 'IMAGE_SIZE', label: '尺寸', type: 'text', placeholder: '1024x1024' },
     ],
   },
@@ -171,9 +180,14 @@ export const SETTINGS_SCHEMA: SettingCategory[] = [
     group: '能力',
     icon: AudioLines,
     fields: [
-      { key: 'TTS_API_KEY', label: 'TTS API Key', type: 'password' },
-      { key: 'TTS_BASE_URL', label: 'Base URL', type: 'text', placeholder: 'https://api.openai.com/v1' },
-      { key: 'TTS_MODEL', label: '模型', type: 'text', placeholder: 'gpt-4o-mini-tts' },
+      {
+        key: 'TTS_PROVIDER',
+        modelKey: 'TTS_MODEL',
+        capability: 'tts',
+        type: 'capability',
+        label: '语音模型',
+        description: '供应商 + 模型；密钥取自供应商库',
+      },
       { key: 'TTS_VOICE', label: '音色', type: 'text', placeholder: 'alloy' },
       { key: 'TTS_FORMAT', label: '格式', type: 'text', placeholder: 'mp3' },
     ],
@@ -216,6 +230,13 @@ export const SETTINGS_SCHEMA: SettingCategory[] = [
         title: '子代理',
         fields: [
           { key: 'SUBAGENT_TIMEOUT_MS', label: '子代理超时(ms)', type: 'number', placeholder: '120000' },
+          {
+            key: 'SUBAGENT_STUCK_MS',
+            label: '子代理卡死阈值(ms)',
+            type: 'number',
+            placeholder: '300000',
+            description: '后台子代理无活动超过此时长判为卡死并自动终止',
+          },
           {
             key: 'SUBAGENT_MODEL',
             label: '子代理模型',

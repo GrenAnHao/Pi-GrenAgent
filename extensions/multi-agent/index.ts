@@ -49,6 +49,16 @@ async function waitForTerminal(reg: SubAgentRegistry, id: string, signal: AbortS
   }
 }
 
+/** Abort + mark any background sub-agent that stopped emitting activity for too long. */
+function reapStuck(reg: SubAgentRegistry): void {
+  const thresholdMs = Number(getConfig("SUBAGENT_STUCK_MS") ?? "300000") || 300000;
+  for (const row of reg.findStuck(thresholdMs)) {
+    inflight.get(row.id)?.abort();
+    reg.finish(row.id, { status: "error", error: `stuck: no activity for >${Math.round(thresholdMs / 1000)}s`, exitCode: -1 });
+    inflight.delete(row.id);
+  }
+}
+
 export default function (pi: ExtensionAPI) {
   pi.registerTool({
     name: "spawn_agent",
@@ -108,8 +118,13 @@ export default function (pi: ExtensionAPI) {
             Type.Literal("status"),
             Type.Literal("wait"),
             Type.Literal("cancel"),
+            Type.Literal("list"),
+            Type.Literal("remove"),
           ],
-          { description: "run (default, blocking) | spawn (background, returns agentId) | status | wait | cancel" },
+          {
+            description:
+              "run (default, blocking) | spawn (background, returns agentId) | status | wait | cancel | list (all sub-agents) | remove (delete a record)",
+          },
         ),
       ),
       agentId: Type.Optional(
@@ -120,11 +135,40 @@ export default function (pi: ExtensionAPI) {
       const action = params.action ?? "run";
       const registry = getRegistry(ctx.cwd);
 
-      if (action === "status" || action === "wait" || action === "cancel") {
+      // Recursion guard: a sub-agent (spawned with PI_IS_SUBAGENT=1) may not spawn
+      // its own sub-agents. Only the top-level agent can create sub-agents.
+      if ((action === "run" || action === "spawn") && process.env.PI_IS_SUBAGENT === "1") {
+        throw new Error("子代理禁止再启动子代理（嵌套 spawn 已被拦截）");
+      }
+
+      if (action === "status" || action === "wait" || action === "cancel" || action === "list" || action === "remove") {
+        // Lazy stuck reaping so status/list reflect reality even without the timer.
+        reapStuck(registry);
+
+        if (action === "list") {
+          const rows = registry.list();
+          const body = rows.length
+            ? rows.map((x) => `${x.id}  [${x.status}]  ${x.model ?? "-"}  ${x.task}`).join("\n")
+            : "(no sub-agents)";
+          return {
+            content: [{ type: "text", text: body }],
+            details: {
+              count: rows.length,
+              agents: rows.map((x) => ({ agentId: x.id, status: x.status, task: x.task, model: x.model })),
+            },
+          };
+        }
+
         const id = params.agentId?.trim();
         if (!id) throw new Error(`action '${action}' requires agentId`);
         const row = registry.get(id);
         if (!row) throw new Error(`unknown agentId: ${id}`);
+
+        if (action === "remove") {
+          if (row.status === "running") inflight.get(id)?.abort();
+          registry.remove(id);
+          return { content: [{ type: "text", text: `removed ${id}` }], details: { agentId: id, removed: true } };
+        }
         if (action === "cancel") {
           if (row.status === "running") {
             inflight.get(id)?.abort();
@@ -175,7 +219,13 @@ export default function (pi: ExtensionAPI) {
         inflight.set(id, controller);
         // Detached: keeps running after this tool call returns; the handler writes
         // the terminal state to the registry, which `wait`/`status` then read.
-        void spawnPiAgent(ctx.cwd, task, { model: chosenModel, env: profileEnv, timeoutMs: limits.timeoutMs, signal: controller.signal })
+        void spawnPiAgent(ctx.cwd, task, {
+          model: chosenModel,
+          env: profileEnv,
+          timeoutMs: limits.timeoutMs,
+          signal: controller.signal,
+          onUpdate: () => registry.touch(id), // heartbeat → stuck detection
+        })
           .then((r) =>
             registry.finish(
               id,
@@ -211,28 +261,46 @@ export default function (pi: ExtensionAPI) {
           );
         }
         const runCwd = wt?.dir ?? ctx.cwd;
+        const id = SubAgentRegistry.genId();
+        registry.create({
+          id,
+          task,
+          profile: params.profile ? JSON.stringify(profile) : null,
+          model: model ?? profileModel ?? null,
+        });
         try {
           const r = await spawnPiAgent(runCwd, task, {
             model: model ?? profileModel,
             env: profileEnv,
             timeoutMs: limits.timeoutMs,
             signal: signal ?? undefined,
-            onUpdate: onUpdate
-              ? (u) =>
-                  onUpdate({
-                    content: [{ type: "text", text: u.text }],
-                    details: { streaming: true, transcript: u.transcript },
-                  })
-              : undefined,
+            onUpdate: (u) => {
+              registry.touch(id); // heartbeat → stuck detection
+              if (onUpdate) {
+                onUpdate({
+                  content: [{ type: "text", text: u.text }],
+                  details: { streaming: true, transcript: u.transcript },
+                });
+              }
+            },
           });
-          if (!r.ok) throw new Error(`sub-agent failed (exit ${r.exitCode}): ${r.error ?? "unknown error"}`);
+          if (!r.ok) {
+            registry.finish(id, {
+              status: signal?.aborted ? "cancelled" : "error",
+              output: r.output,
+              error: r.error,
+              exitCode: r.exitCode,
+            });
+            throw new Error(`sub-agent failed (exit ${r.exitCode}): ${r.error ?? "unknown error"}`);
+          }
           const diff = wt ? await worktreeDiff(wt.dir) : undefined;
+          registry.finish(id, { status: "done", output: r.output, exitCode: r.exitCode });
           const text = wt
             ? `${r.output || "(no output)"}\n\n---\n### Diff (isolated worktree)\n\n${diff?.trim() ? "```diff\n" + diff + "\n```" : "(no file changes)"}`
             : r.output || "(no output)";
           return {
             content: [{ type: "text", text }],
-            details: { exitCode: r.exitCode, transcript: r.transcript, isolated: !!wt, diff },
+            details: { agentId: id, exitCode: r.exitCode, transcript: r.transcript, isolated: !!wt, diff },
           };
         } finally {
           if (wt) await wt.cleanup();
@@ -244,14 +312,29 @@ export default function (pi: ExtensionAPI) {
       for (let i = 0; i < list.length; i += concurrency) {
         const batch = list.slice(i, i + concurrency);
         const settled = await Promise.all(
-          batch.map((t) =>
-            spawnPiAgent(ctx.cwd, t.task, {
+          batch.map(async (t) => {
+            const id = SubAgentRegistry.genId();
+            registry.create({
+              id,
+              task: t.task,
+              profile: params.profile ? JSON.stringify(profile) : null,
+              model: t.model ?? profileModel ?? null,
+            });
+            const r = await spawnPiAgent(ctx.cwd, t.task, {
               model: t.model ?? profileModel,
               env: profileEnv,
               timeoutMs: limits.timeoutMs,
               signal: signal ?? undefined,
-            }),
-          ),
+              onUpdate: () => registry.touch(id),
+            });
+            registry.finish(
+              id,
+              r.ok
+                ? { status: "done", output: r.output, exitCode: r.exitCode }
+                : { status: signal?.aborted ? "cancelled" : "error", output: r.output, error: r.error, exitCode: r.exitCode },
+            );
+            return r;
+          }),
         );
         settled.forEach((r, j) => results.push({ task: batch[j].task, ok: r.ok, output: r.output, error: r.error }));
       }
@@ -269,4 +352,11 @@ export default function (pi: ExtensionAPI) {
       };
     },
   });
+
+  // Periodic stuck reaping across all open registries (unref'd so it never keeps
+  // the process alive). Lazy reaping on list/status covers on-demand cases.
+  const stuckTimer = setInterval(() => {
+    for (const reg of registries.values()) reapStuck(reg);
+  }, 60000);
+  stuckTimer.unref?.();
 }

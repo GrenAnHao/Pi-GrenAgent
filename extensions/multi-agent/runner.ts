@@ -105,6 +105,9 @@ export async function spawnPiAgent(
         MEMORY_EXTRACT: "0",
         MCP_SERVERS: "",
         ...(opts.env ?? {}),
+        // Tag every spawned child as a sub-agent so it refuses to spawn its own
+        // sub-agents (recursion guard). Set last so callers can't override it.
+        PI_IS_SUBAGENT: "1",
       },
     });
     let stdout = "";

@@ -71,4 +71,31 @@ describe("SubAgentRegistry", () => {
     expect(r.get("sa-orphan00")?.error).toContain("orphaned");
     r.close();
   });
+
+  it("touch keeps a running row running", () => {
+    const r = reg();
+    r.create({ id: "sa-touch001", task: "t" });
+    r.touch("sa-touch001");
+    expect(r.get("sa-touch001")?.status).toBe("running");
+    r.close();
+  });
+
+  it("findStuck returns running rows older than threshold, ignores terminal", () => {
+    const r = reg();
+    r.create({ id: "sa-stuck001", task: "t" });
+    expect(r.findStuck(0).map((x) => x.id)).toContain("sa-stuck001");
+    expect(r.findStuck(100000)).toEqual([]);
+    r.finish("sa-stuck001", { status: "done" });
+    expect(r.findStuck(0)).toEqual([]);
+    r.close();
+  });
+
+  it("remove deletes a record (idempotent)", () => {
+    const r = reg();
+    r.create({ id: "sa-rm000001", task: "t" });
+    expect(r.remove("sa-rm000001")).toBe(true);
+    expect(r.get("sa-rm000001")).toBeUndefined();
+    expect(r.remove("sa-rm000001")).toBe(false);
+    r.close();
+  });
 });

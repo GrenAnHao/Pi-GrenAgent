@@ -105,6 +105,25 @@ export class SubAgentRegistry {
       .all(limit) as unknown as SubAgentRow[];
   }
 
+  /** Heartbeat: bump updatedAt for a running row (background spawn's stream calls this). */
+  touch(id: string): void {
+    this.database.prepare("UPDATE subagents SET updatedAt=? WHERE id=? AND status='running'").run(Date.now(), id);
+  }
+
+  /** Running rows with no activity (updatedAt) for >= thresholdMs — candidates for stuck reaping. */
+  findStuck(thresholdMs: number): SubAgentRow[] {
+    const cutoff = Date.now() - Math.max(0, thresholdMs);
+    return this.database
+      .prepare("SELECT * FROM subagents WHERE status='running' AND updatedAt <= ? ORDER BY updatedAt ASC")
+      .all(cutoff) as unknown as SubAgentRow[];
+  }
+
+  /** Delete a record. The main agent controls lifecycle — sub-agents are not auto-destroyed. */
+  remove(id: string): boolean {
+    const info = this.database.prepare("DELETE FROM subagents WHERE id=?").run(id);
+    return Number(info.changes) > 0;
+  }
+
   /** After a restart any still-"running" row is an orphan (its process is gone). */
   reapOrphans(): number {
     const info = this.database
