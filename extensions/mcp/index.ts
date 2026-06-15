@@ -1,22 +1,21 @@
 // mcp: connect external MCP servers (stdio / SSE) and expose their tools to the
-// agent as `mcp__<server>__<tool>`. Connections live for the sidecar process.
+// agent as `mcp__<server>__<tool>`.
 //
-// Loading is ASYNC: the factory returns immediately and connections run in the
-// background (started on the first session_start, so the runtime is bound and the
-// UI is up). Each server connects in parallel; on success its tools are registered
-// dynamically (pi.registerTool internally refreshes the tool registry) and then
-// activated via setActiveTools. Status (connecting → connected/failed) is pushed
-// live to the GUI. This keeps app startup instant instead of blocking on MCP.
+// Servers HOT-RELOAD at runtime: a fs.watch on the runtime config (via
+// _shared/runtime-config) re-diffs MCP_SERVERS on change and connects new /
+// disconnects removed / re-connects changed servers — no sidecar restart.
+// Tools are registered dynamically (pi.registerTool refreshes the registry) and
+// activated via setActiveTools; removal deactivates them + closes the client.
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { Type } from "typebox";
+import { getConfig, watchConfig } from "../_shared/runtime-config.js";
 import { injectDefaultServers, type McpServerConfig, parseMcpServers, sanitize } from "./config.js";
+import { diffServers } from "./diff.js";
 
-// Async background loading no longer blocks startup, so we can afford a generous
-// connect timeout for slow npx cold-starts / package downloads (override via MCP_TIMEOUT_MS).
 const MCP_TIMEOUT_MS = Number(process.env.MCP_TIMEOUT_MS ?? "60000") || 60000;
 
 function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
@@ -39,7 +38,6 @@ async function connect(s: McpServerConfig): Promise<Client> {
   try {
     await withTimeout(client.connect(transport), MCP_TIMEOUT_MS);
   } catch (e) {
-    // Close on failure so a slow/failed stdio transport doesn't leak its child process.
     await client.close().catch(() => {});
     throw e;
   }
@@ -49,32 +47,27 @@ async function connect(s: McpServerConfig): Promise<Client> {
 type McpStatus = "connecting" | "connected" | "failed";
 
 export default function (pi: ExtensionAPI) {
-  const servers = injectDefaultServers(
-    parseMcpServers(process.env.MCP_SERVERS ?? ""),
-    process.env,
-    process.platform,
-  );
-  if (servers.length === 0) return;
+  const readServers = (): McpServerConfig[] =>
+    injectDefaultServers(parseMcpServers(getConfig("MCP_SERVERS") ?? ""), process.env, process.platform);
 
-  const clients: Client[] = [];
+  let currentServers = readServers();
+  const clients = new Map<string, Client>();
   const registry = new Map<string, { status: McpStatus; tools: number; error?: string; toolNames?: string[] }>();
-  for (const s of servers) registry.set(s.name, { status: "connecting", tools: 0 });
+  for (const s of currentServers) registry.set(s.name, { status: "connecting", tools: 0 });
 
-  // Bound to the latest session_start ctx.ui so background connects can push live status.
   let pushStatus: (() => void) | undefined;
   const summary = () =>
-    servers.map((s) => ({
-      name: s.name,
-      transport: s.transport,
-      status: registry.get(s.name)?.status ?? "failed",
-      tools: registry.get(s.name)?.tools ?? 0,
-      toolNames: registry.get(s.name)?.toolNames ?? [],
+    [...registry.entries()].map(([name, r]) => ({
+      name,
+      status: r.status,
+      tools: r.tools,
+      toolNames: r.toolNames ?? [],
     }));
 
   const connectServer = async (s: McpServerConfig): Promise<void> => {
     try {
       const client = await connect(s);
-      clients.push(client);
+      clients.set(s.name, client);
       const { tools } = await withTimeout(client.listTools(), MCP_TIMEOUT_MS);
       const newNames: string[] = [];
       for (const t of tools) {
@@ -100,8 +93,6 @@ export default function (pi: ExtensionAPI) {
         });
         newNames.push(name);
       }
-      // registerTool() refreshed the tool registry; now activate the new tools so
-      // the agent can call them this turn (matches the old sync behavior).
       if (newNames.length) {
         try {
           const active = pi.getActiveTools();
@@ -120,8 +111,24 @@ export default function (pi: ExtensionAPI) {
     pushStatus?.();
   };
 
-  // Push status on every session_start (a freshly-mounted front-end picks up current
-  // status), and kick off the background connect exactly once (after the first bind).
+  const disconnectServer = async (name: string): Promise<void> => {
+    const client = clients.get(name);
+    const toolNames = registry.get(name)?.toolNames ?? [];
+    if (client) await client.close().catch(() => {});
+    clients.delete(name);
+    if (toolNames.length) {
+      try {
+        const active = pi.getActiveTools();
+        pi.setActiveTools(active.filter((t) => !toolNames.includes(t)));
+      } catch {
+        // ignore: deactivation best-effort
+      }
+    }
+    registry.delete(name);
+    console.error(`[mcp] disconnected "${name}"`);
+    pushStatus?.();
+  };
+
   let started = false;
   pi.on("session_start", async (_event, ctx) => {
     if (ctx.hasUI) {
@@ -136,11 +143,29 @@ export default function (pi: ExtensionAPI) {
     }
     if (started) return;
     started = true;
-    void Promise.all(servers.map(connectServer));
+    void Promise.all(currentServers.map(connectServer));
+
+    // 运行时热更新：MCP_SERVERS 变化 → 先断（移除+变更），再连（新增+变更）。
+    watchConfig(() => {
+      void (async () => {
+        const desired = readServers();
+        const { added, removed, changed } = diffServers(currentServers, desired);
+        if (!added.length && !removed.length && !changed.length) return;
+        currentServers = desired;
+        await Promise.all([...removed, ...changed.map((c) => c.name)].map((n) => disconnectServer(n)));
+        await Promise.all(
+          [...added, ...changed].map((s) => {
+            registry.set(s.name, { status: "connecting", tools: 0 });
+            return connectServer(s);
+          }),
+        );
+        pushStatus?.();
+      })();
+    });
   });
 
   const cleanup = () => {
-    for (const c of clients) void c.close().catch(() => {});
+    for (const c of clients.values()) void c.close().catch(() => {});
   };
   process.on("exit", cleanup);
   process.on("SIGTERM", cleanup);
