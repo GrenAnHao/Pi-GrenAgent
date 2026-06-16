@@ -1,5 +1,6 @@
 pub mod agent;
 pub mod checkpoint;
+pub mod code_intel;
 pub mod create;
 pub mod files;
 pub mod git;

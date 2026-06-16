@@ -106,6 +106,11 @@ pub fn run() {
             commands::shell::shell_write,
             commands::shell::shell_resize,
             commands::shell::shell_stop,
+            commands::code_intel::code_intel_status,
+            commands::code_intel::code_intel_init,
+            commands::code_intel::code_intel_sync,
+            commands::code_intel::code_intel_reindex,
+            commands::code_intel::code_intel_is_initialized,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
