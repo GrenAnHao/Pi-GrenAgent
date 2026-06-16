@@ -1,0 +1,17 @@
+{
+  "name": "pi-session-memory",
+  "version": "0.1.0",
+  "description": "Structured session working-state + post-compaction re-anchoring for the Pi coding agent.",
+  "private": true,
+  "type": "module",
+  "keywords": ["pi-package", "pi-extension", "session-memory"],
+  "license": "MIT",
+  "pi": { "extensions": ["./index.ts"] },
+  "scripts": { "test": "vitest run" },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-agent-core": "*",
+    "vitest": "^4.1.8"
+  }
+}

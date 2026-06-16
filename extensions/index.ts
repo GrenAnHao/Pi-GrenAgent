@@ -12,6 +12,7 @@ import goal from "./goal/index.js";
 import imageGen from "./image-gen/index.js";
 import knowledgeRag from "./knowledge-rag/index.js";
 import longTermMemory from "./long-term-memory/index.js";
+import sessionMemory from "./session-memory/index.js";
 import mcp from "./mcp/index.js";
 import mcpPolicy from "./mcp-policy/index.js";
 import multiAgent from "./multi-agent/index.js";
@@ -33,6 +34,7 @@ export {
   goal,
   knowledgeRag,
   longTermMemory,
+  sessionMemory,
   webFetch,
   webSearch,
   mcp,
@@ -56,6 +58,7 @@ export const allExtensions = [
   goal,
   knowledgeRag,
   longTermMemory,
+  sessionMemory,
   webFetch,
   webSearch,
   mcp,
