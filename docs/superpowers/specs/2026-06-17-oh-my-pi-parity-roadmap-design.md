@@ -91,7 +91,7 @@ omp 工具注册表（`packages/coding-agent/src/tools/index.ts:415` `BUILTIN_TO
 
 1. [已实现] **ast_grep / ast_edit**（新扩展 `ast-tools/`，`@ast-grep/napi`）：结构化查询 + 重写（metavar 手动展开）。实测核心 5 语言（js/jsx/ts/tsx/css/html），其余后续。spec `2026-06-17-ast-tools-design.md`。
 2. [已实现] **github**（新扩展 `github/`，gh CLI 精简只读）：pr/issue/repo view、list、code search、pr diff。`pr://` 推波2。spec `2026-06-17-github-tool-design.md`。
-3. [待做] **LSP 写后自动诊断回灌**（增强 `lsp` + `diagnostics`）：after-tool hook 或 override edit/write，编辑后自动跑 LSP 诊断、deferred 回灌给模型；带 ledger 去重与 stale 丢弃。
+3. [暂缓] **LSP 写后自动诊断回灌**——可行性受限：Pi 扩展无 after-tool 钩子（仅 `tool_call` before），纯扩展只能近似（`tool_call` 记录编辑文件 + `turn_end` 跑诊断 + `before_agent_start` 注入）；且 `lsp` 扩展的 `LspClient` 未导出、跨扩展复用复杂；tsc/eslint 全项目跑偏慢。ROI 不如前三项，已有手动 `diagnostics` + `lsp` 工具可顶。后续若 Pi 增 after-tool 钩子或 `lsp` 导出诊断函数再做。
 4. [已实现] **eval 加 JS 内核**（增强 `code-exec`，`js_run`/`js_reset`，node:vm）：常驻 JS kernel、completion value 回显、var/全局持久。top-level await + 工具回灌桥后续。spec `2026-06-17-eval-js-design.md`。
 
 ### 波2 — 基建与机制（解锁后续）
