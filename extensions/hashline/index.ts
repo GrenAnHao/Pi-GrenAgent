@@ -14,13 +14,14 @@ import { applyOps } from "./apply.js";
 import { parsePatch } from "./parser.js";
 import { HASHLINE_PROMPT } from "./prompt.js";
 import { recover } from "./recovery.js";
+import { SnapshotStore } from "./snapshot-store.js";
 import { computeTag, renderRead } from "./snapshots.js";
 
 export default function (pi: ExtensionAPI) {
   console.error("[hashline] extension loaded");
 
-  // hl_read 快照（内存，进程级）：path → 模型读到的内容 + 当时 tag。供 hl_edit 锚点过期时 3-way merge 恢复。
-  const snapshots = new Map<string, { content: string; tag: string }>();
+  // hl_read 快照（内存，进程级，LRU 上限 50）：path → 模型读到的内容 + 当时 tag。供 hl_edit 锚点过期时 3-way merge 恢复。
+  const snapshots = new SnapshotStore();
 
   pi.registerTool({
     name: "hl_read",
