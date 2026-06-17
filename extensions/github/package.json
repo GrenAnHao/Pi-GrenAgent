@@ -1,0 +1,23 @@
+{
+  "name": "pi-github",
+  "version": "0.1.0",
+  "description": "Read-only GitHub tool for the Pi coding agent: pr/issue/repo view, lists, and code search via the gh CLI.",
+  "private": true,
+  "type": "module",
+  "keywords": ["pi-package", "pi-extension", "github", "gh"],
+  "license": "MIT",
+  "pi": {
+    "extensions": ["./index.ts"]
+  },
+  "scripts": {
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "typebox": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "typebox": "*",
+    "vitest": "*"
+  }
+}
