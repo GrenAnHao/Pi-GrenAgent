@@ -89,10 +89,10 @@ omp 工具注册表（`packages/coding-agent/src/tools/index.ts:415` `BUILTIN_TO
 
 ### 波1 — 编码闭环直接收益（高 ROI，先做）
 
-1. **ast_edit / ast_grep**（新扩展 `ast-tools/`）：`@ast-grep/napi` 注册 `ast_grep`（结构化查询，50+ 语法）+ `ast_edit`（结构化重写，预览→接受）。
-2. **github + pr://**（新扩展 `github/`）：`github` 工具（gh CLI：repo/PR/issue/code search/Actions）+ override read 解析 `pr://`/`issue://`。
-3. **LSP 写后自动诊断回灌**（增强 `lsp` + `diagnostics`）：after-tool hook 或 override edit/write，编辑后自动跑 LSP 诊断、deferred 回灌给模型；带 ledger 去重与 stale 丢弃。
-4. **eval 加 JS 内核**（增强 `code-exec`）：常驻 JS kernel（Node 子进程）、cell 批量、`display()` 富输出；工具回灌桥做可行性验证。
+1. [已实现] **ast_grep / ast_edit**（新扩展 `ast-tools/`，`@ast-grep/napi`）：结构化查询 + 重写（metavar 手动展开）。实测核心 5 语言（js/jsx/ts/tsx/css/html），其余后续。spec `2026-06-17-ast-tools-design.md`。
+2. [已实现] **github**（新扩展 `github/`，gh CLI 精简只读）：pr/issue/repo view、list、code search、pr diff。`pr://` 推波2。spec `2026-06-17-github-tool-design.md`。
+3. [待做] **LSP 写后自动诊断回灌**（增强 `lsp` + `diagnostics`）：after-tool hook 或 override edit/write，编辑后自动跑 LSP 诊断、deferred 回灌给模型；带 ledger 去重与 stale 丢弃。
+4. [已实现] **eval 加 JS 内核**（增强 `code-exec`，`js_run`/`js_reset`，node:vm）：常驻 JS kernel、completion value 回显、var/全局持久。top-level await + 工具回灌桥后续。spec `2026-06-17-eval-js-design.md`。
 
 ### 波2 — 基建与机制（解锁后续）
 
