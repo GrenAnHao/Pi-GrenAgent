@@ -1,0 +1,27 @@
+{
+  "name": "pi-ast-tools",
+  "version": "0.1.0",
+  "description": "Structural code search and rewrite for the Pi coding agent: ast_grep + ast_edit, backed by @ast-grep/napi.",
+  "private": true,
+  "type": "module",
+  "keywords": ["pi-package", "pi-extension", "ast", "ast-grep", "codemod"],
+  "license": "MIT",
+  "pi": {
+    "extensions": ["./index.ts"]
+  },
+  "scripts": {
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "typebox": "*"
+  },
+  "dependencies": {
+    "@ast-grep/napi": "*",
+    "tinyglobby": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "typebox": "*",
+    "vitest": "*"
+  }
+}
