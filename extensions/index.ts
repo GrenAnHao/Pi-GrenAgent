@@ -6,8 +6,11 @@ import autoTitle from "./auto-title/index.js";
 import checkpoint from "./checkpoint/index.js";
 import compactionPolicy from "./compaction-policy/index.js";
 import loopGuard from "./loop-guard/index.js";
+import rulebook from "./rulebook/index.js";
 import codeReview from "./code-review/index.js";
 import codeSearch from "./code-search/index.js";
+import astTools from "./ast-tools/index.js";
+import batchTools from "./batch-tools/index.js";
 import diagnostics from "./diagnostics/index.js";
 import imGateway from "./im-gateway/index.js";
 import goal from "./goal/index.js";
@@ -19,7 +22,13 @@ import mcp from "./mcp/index.js";
 import mcpPolicy from "./mcp-policy/index.js";
 import multiAgent from "./multi-agent/index.js";
 import codeIntel from "./code-intel/index.js";
-import planMode from "./plan-mode/index.js";
+import lsp from "./lsp/index.js";
+import agentMode from "./agent-mode/index.js";
+import debugTools from "./debug-tools/index.js";
+import codeExec from "./code-exec/index.js";
+import hashline from "./hashline/index.js";
+import dap from "./dap/index.js";
+import diagramHint from "./diagram-hint/index.js";
 import safety from "./safety/index.js";
 import todo from "./todo/index.js";
 import tts from "./tts/index.js";
@@ -30,11 +39,15 @@ import webSearch from "./web-search/index.js";
 export {
   safety,
   loopGuard,
+  rulebook,
   compactionPolicy,
   autoTitle,
   checkpoint,
   todo,
-  planMode,
+  agentMode,
+  debugTools,
+  dap,
+  diagramHint,
   goal,
   knowledgeRag,
   longTermMemory,
@@ -49,7 +62,12 @@ export {
   diagnostics,
   multiAgent,
   codeIntel,
+  lsp,
   codeSearch,
+  astTools,
+  batchTools,
+  codeExec,
+  hashline,
   tts,
   imGateway,
 };
@@ -58,11 +76,15 @@ export {
 export const allExtensions = [
   safety,
   loopGuard,
+  rulebook,
   compactionPolicy,
   autoTitle,
   checkpoint,
   todo,
-  planMode,
+  agentMode,
+  debugTools,
+  dap,
+  diagramHint,
   goal,
   knowledgeRag,
   longTermMemory,
@@ -77,7 +99,12 @@ export const allExtensions = [
   diagnostics,
   multiAgent,
   codeIntel,
+  lsp,
   codeSearch,
+  astTools,
+  batchTools,
+  codeExec,
+  hashline,
   tts,
   imGateway,
 ];
