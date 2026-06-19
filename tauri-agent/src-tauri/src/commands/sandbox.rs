@@ -117,17 +117,25 @@ pub async fn sandbox_install(step: String) -> Result<String, String> {
                 .ok_or_else(|| "无可用的 WSL2 发行版（请先安装 WSL）".to_string())?;
             let distro =
                 pick_distro(&list).ok_or_else(|| "无可用的 WSL2 发行版（请先安装 WSL）".to_string())?;
-            // stdin=null：若 sudo 需要密码则快速失败并把提示回报，而不是挂起。
-            let script = "sudo -n apt-get update && sudo -n apt-get install -y bubblewrap socat ripgrep && sudo -n npm i -g @anthropic-ai/sandbox-runtime";
+            // 以 root 运行（wsl -u root）→ 无需 sudo 密码，全自动一键。装 apt 依赖
+            // （bubblewrap/socat/ripgrep）；缺 npm 则一并装 nodejs/npm；再全局装 srt。
+            // 幂等：已装的 apt 包跳过，npm i -g 重装无害。stdin=null 防任何意外交互挂起。
+            let script = "set -e; export DEBIAN_FRONTEND=noninteractive; \
+                 apt-get update; \
+                 apt-get install -y bubblewrap socat ripgrep; \
+                 command -v npm >/dev/null 2>&1 || apt-get install -y nodejs npm; \
+                 npm i -g @anthropic-ai/sandbox-runtime; \
+                 echo SANDBOX_DEPS_DONE";
             let out = Command::new("wsl.exe")
-                .args(["-d", &distro, "--", "bash", "-lc", script])
+                .args(["-d", &distro, "-u", "root", "--", "bash", "-lc", script])
                 .stdin(Stdio::null())
                 .output()
                 .await
                 .map_err(|e| format!("依赖安装失败: {e}"))?;
-            if !out.status.success() {
+            let stdout = decode_wsl(&out.stdout);
+            if !out.status.success() || !stdout.contains("SANDBOX_DEPS_DONE") {
                 return Err(format!(
-                    "依赖安装失败（{distro}）：{}\n若提示需要密码，请在 WSL 里配置 passwordless sudo，或手动执行：{script}",
+                    "依赖安装失败（{distro}）：{}",
                     decode_wsl(&out.stderr).trim()
                 ));
             }

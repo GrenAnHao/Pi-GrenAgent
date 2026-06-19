@@ -70,11 +70,12 @@ export function SandboxCard() {
         ) : status && !status.deps ? (
           <Button
             size="small"
+            type="primary"
             loading={busy}
             data-testid="sandbox-install-deps"
             onClick={() => void install('deps')}
           >
-            装依赖
+            一键安装
           </Button>
         ) : null}
       </Flexbox>
