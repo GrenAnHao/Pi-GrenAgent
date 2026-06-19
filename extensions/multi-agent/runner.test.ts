@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { profileToEnv, resolveProfile } from "./capability.js";
 import { buildSubagentRuntimeConfig, extractFinalText, resolvePiCommand, resolveSubagentModel } from "./runner.js";
 
 const origPiBin = process.env.PI_BIN;
@@ -68,6 +69,82 @@ describe("buildSubagentRuntimeConfig", () => {
     const deny = rc.env.SAFETY_DENY_TOOLS.split(",");
     expect(deny).toContain("bash");
     expect(deny).toContain("explore_context");
+    rc.cleanup();
+  });
+});
+
+// 端到端契约：从 preset 名 → profileToEnv → buildSubagentRuntimeConfig，断言「父进程实际下发给
+// 子代理的限制」。这是子代理安全模型可确定性验证的一半（另一半是 pi 二进制是否在子代理加载并
+// 强制 SAFETY_*，那需运行时集成测试）。
+describe("preset → injected sub-agent restrictions (end-to-end contract)", () => {
+  const denyOf = (rc: { env: Record<string, string> }) => (rc.env.SAFETY_DENY_TOOLS ?? "").split(",");
+
+  it("explore: readonly + denies bypass-writers/code-exec/spawn + no MCP", () => {
+    delete process.env.PI_RUNTIME_CONFIG;
+    const p = resolveProfile("explore");
+    const rc = buildSubagentRuntimeConfig(p.mcp, profileToEnv(p));
+    expect(rc.env.SAFETY_READONLY).toBe("1");
+    const deny = denyOf(rc);
+    for (const t of [
+      "ast_edit",
+      "hl_edit",
+      "py_run",
+      "js_run",
+      "sandbox_sh",
+      "dap_launch",
+      "dap_evaluate",
+      "spawn_agent",
+      "explore_context",
+    ]) {
+      expect(deny).toContain(t);
+    }
+    expect(rc.env.MCP_SERVERS).toBe(""); // explore.mcp=false → 无 MCP
+    rc.cleanup();
+  });
+
+  it("reviewer: readonly + net off (denies net tools) + cannot spawn", () => {
+    delete process.env.PI_RUNTIME_CONFIG;
+    const p = resolveProfile("reviewer");
+    const rc = buildSubagentRuntimeConfig(p.mcp, profileToEnv(p));
+    expect(rc.env.SAFETY_READONLY).toBe("1");
+    const deny = denyOf(rc);
+    expect(deny).toContain("web_search"); // net=false
+    expect(deny).toContain("fetch_url");
+    expect(deny).toContain("spawn_agent");
+    rc.cleanup();
+  });
+
+  it("planner: writeAllow plans/docs but still denies bypass writers", () => {
+    delete process.env.PI_RUNTIME_CONFIG;
+    const p = resolveProfile("planner");
+    const env = profileToEnv(p);
+    expect(env.SAFETY_READONLY).toBe("1");
+    expect(env.SAFETY_WRITE_ALLOW).toBe("plans/,docs/");
+    const rc = buildSubagentRuntimeConfig(p.mcp, env);
+    expect(denyOf(rc)).toContain("py_run");
+    rc.cleanup();
+  });
+
+  it("default: workspace write (no readonly) yet still cannot spawn sub-agents", () => {
+    delete process.env.PI_RUNTIME_CONFIG;
+    const p = resolveProfile(undefined);
+    const rc = buildSubagentRuntimeConfig(p.mcp, profileToEnv(p));
+    expect(rc.env.SAFETY_READONLY).toBeUndefined();
+    const deny = denyOf(rc);
+    expect(deny).toContain("spawn_agent");
+    expect(deny).toContain("explore_context");
+    rc.cleanup();
+  });
+
+  it("executor: worktree-isolated workspace write, still cannot spawn", () => {
+    delete process.env.PI_RUNTIME_CONFIG;
+    const p = resolveProfile("executor");
+    const rc = buildSubagentRuntimeConfig(p.mcp, profileToEnv(p));
+    // executor.fs=workspace → 不只读；但 net=false → 禁联网，且永不可再 spawn
+    expect(rc.env.SAFETY_READONLY).toBeUndefined();
+    const deny = denyOf(rc);
+    expect(deny).toContain("web_search");
+    expect(deny).toContain("spawn_agent");
     rc.cleanup();
   });
 });

@@ -1,5 +1,42 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("../_shared/runtime-config.js", () => ({ getConfig: vi.fn() }));
+
+import { getApprovalPolicy, setApprovalPolicy } from "../_shared/approval.js";
+import { getConfig } from "../_shared/runtime-config.js";
 import approval from "./index.js";
+
+type SessionStart = (event: unknown, ctx: unknown) => Promise<void>;
+
+interface SessionEntry {
+  type: string;
+  customType?: string;
+  data?: unknown;
+}
+
+// 加载扩展并捕获 session_start 处理器（审批策略继承在此发生）。
+function loadSessionStart(): SessionStart {
+  let handler: SessionStart | undefined;
+  const pi = {
+    registerCommand: () => {},
+    on: (ev: string, h: SessionStart) => {
+      if (ev === "session_start") handler = h;
+    },
+    appendEntry: () => {},
+  };
+  approval(pi as unknown as Parameters<typeof approval>[0]);
+  return handler!;
+}
+
+const ctx = (entries: SessionEntry[] = []) => ({
+  sessionManager: { getEntries: () => entries },
+  ui: { setStatus: vi.fn() },
+});
+
+beforeEach(() => {
+  vi.resetAllMocks();
+  setApprovalPolicy("auto"); // 复位进程内单例
+});
 
 describe("approval extension", () => {
   it("registers the approval command", () => {
@@ -11,5 +48,34 @@ describe("approval extension", () => {
     };
     approval(pi as unknown as Parameters<typeof approval>[0]);
     expect(cmds).toEqual(["approval"]);
+  });
+});
+
+describe("approval policy inheritance on session_start", () => {
+  it("inherits APPROVAL_POLICY from config when no session entry (sub-agent inheritance)", async () => {
+    vi.mocked(getConfig).mockReturnValue("full");
+    await loadSessionStart()({}, ctx([]));
+    expect(getApprovalPolicy()).toBe("full");
+  });
+
+  it("session entry wins over inherited APPROVAL_POLICY", async () => {
+    vi.mocked(getConfig).mockReturnValue("full");
+    await loadSessionStart()(
+      {},
+      ctx([{ type: "custom", customType: "approval", data: { policy: "ask" } }]),
+    );
+    expect(getApprovalPolicy()).toBe("ask");
+  });
+
+  it("defaults to auto when neither session entry nor APPROVAL_POLICY present", async () => {
+    vi.mocked(getConfig).mockReturnValue(undefined);
+    await loadSessionStart()({}, ctx([]));
+    expect(getApprovalPolicy()).toBe("auto");
+  });
+
+  it("ignores an invalid APPROVAL_POLICY value and falls back to auto", async () => {
+    vi.mocked(getConfig).mockReturnValue("garbage");
+    await loadSessionStart()({}, ctx([]));
+    expect(getApprovalPolicy()).toBe("auto");
   });
 });
