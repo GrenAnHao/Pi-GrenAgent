@@ -226,6 +226,9 @@ export const pi = {
     invoke<void>('delete_pi_session', { workspace, sessionPath }),
   createConversation: () => invoke<{ cwd: string }>('create_conversation'),
   getWorksDir: () => invoke<string>('get_works_dir'),
+  /** 清理 works 下所有无会话的孤儿对话目录（保留 keep 列表）；返回删除条数。 */
+  pruneOrphanConversations: (keep: string[]) =>
+    invoke<number>('prune_orphan_conversations', { keep }),
   deleteConversation: (workspace: string) =>
     invoke<void>('delete_conversation', { workspace }),
   removeProject: (workspace: string) =>
@@ -308,3 +311,14 @@ export function onPiUiRequest(handler: (e: PiUiRequestEnvelope) => void): Promis
 export function onPiExit(handler: (e: PiExitEnvelope) => void): Promise<UnlistenFn> {
   return listen<PiExitEnvelope>('pi://exit', (e) => handler(e.payload));
 }
+
+// 沙箱（WSL2 + @anthropic-ai/sandbox-runtime）就绪状态 + 引导安装。
+export interface SandboxStatus {
+  wsl: boolean;
+  distro?: string;
+  deps: boolean;
+  ready: boolean;
+}
+export const sandboxStatus = (): Promise<SandboxStatus> => invoke<SandboxStatus>('sandbox_status');
+export const sandboxInstall = (step: 'wsl' | 'deps'): Promise<string> =>
+  invoke<string>('sandbox_install', { step });
