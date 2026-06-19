@@ -793,6 +793,14 @@ e2e 暴露并修复了 3 个会让沙箱完全失效的 bug（均已含在任务
 
 1. **缺 ripgrep 探测**：`srt` 运行时依赖 `rg`，原探测只查 `srt/bwrap/socat` → rg 缺失时误报可用、运行时炸。探测 + 安装均补 `ripgrep`。
 2. **wslExec UTF-16 误解码**：`wsl.exe` 自身输出（`-l -v`）是 UTF-16LE，但子命令（`-d .. -- ..`）输出是 UTF-8；原代码一律按 UTF-16 解码 → deps 探测的 "OK" 成乱码 → 探测永远失败 → 永远降级。改为「剔 NUL 字节 + UTF-8 解码」，两者皆成立。
-3. **wsl 吞位置参数**：`wsl -- bash -lc <script> a b c` 不会把 a/b/c 传给 `$1/$2`（实测为空）→ 命令为空、什么都没跑。改为**命令 base64 后管道喂进沙箱 bash** + 经登录 shell（解析 srt/node 的自定义 PATH）。
+3. **wsl 吞位置参数 / 命令转义与超长**：`wsl -- bash -lc <script> a b c` 不会把 a/b/c 传给 `$1/$2`（实测为空）；内联命令还受 Windows 命令行长度上限与转义困扰。**最终方案：命令落盘为 `cmd.sh`**（settings 也落盘 temp），经登录 shell 执行 `bash -lc "srt --settings '<settings>' bash '<cmd.sh>'"`——登录 shell 解析 srt/node 的自定义 PATH，argv 只含无空格 tmp 路径，免转义、不超长（评审 `ebefa2cb` 收敛；早期曾试 base64 管道，已弃用）。
 
 srt settings schema 经实测确认为全字段必填（`denyRead/allowWrite/denyWrite` + `allowedDomains/deniedDomains`），与 `buildSrtSettings` 产出一致。
+
+## 实现落地说明（接口对齐，以代码为准）
+
+任务 6/7 的最终接口相对上方 TDD 代码块有演进（经任务 15 e2e + 评审 `ebefa2cb`/`a534dcc3` 收敛）；上方代码块为历史草案，实际以实现文件为准：
+
+- **任务 6（`wsl.ts`）**：`WslSandboxOpts` 注入点是 `prepare(spec, wslCwd, command)`（返回 `{settings, cmd, cleanup}`，settings 与命令各落盘 temp）而非 `writeSettings`。`exec()` 组 `wsl.exe -d <distro> --cd <wslCwd> -- bash -lc "srt --settings '<settings>' bash '<cmd.sh>'"`（登录 shell + 命令落盘），结束 `cleanup()` 清理；`wsl.test.ts` 据此断言。
+- **任务 7（`index.ts`）**：探测命令为 `command -v srt bwrap socat rg`（含 **ripgrep**）；`wslExec` 剔 NUL + UTF-8 解码（非 `utf16le`）；缓存为 `{adapter, at}`——正缓存长期、负缓存 TTL 30s（装好依赖自愈）；导出 `resetSandboxCache()`（`__resetForTest` 为其别名）。
+- **审批联动（任务 9-12）**：`getSandbox()` 在 `SANDBOX_ENABLE=off` 时返回 `NoopSandbox`；是否路由不再由消费者直接 `getSandbox().isAvailable()` 决定，而经 `_shared/sandbox-gate.ts` 的 `sandboxOn()`（owner 会话，策略感知）/ `sandboxAvailable()`（im-platforms / multi-agent，策略无关）裁决——详见审批策略设计 `2026-06-19-approval-policy-design.md` §3.4。code-exec 的沙箱路由抽到 `code-exec/sandbox-exec.ts` 的 `runCodeInSandbox()`。

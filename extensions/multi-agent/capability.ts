@@ -15,7 +15,7 @@ export interface CapabilityProfile {
   mcp?: boolean | string[];
   /** Allow this sub-agent to itself spawn sub-agents. Reserved (P3 enforces). */
   spawn?: boolean;
-  /** Isolation tier. P0 implements `process` only. */
+  /** Isolation tier: process（默认）/ worktree（隔离 git worktree，返回 diff）/ sandbox（WSL2 srt 隔离执行）。三者均已实现。 */
   isolation?: "process" | "worktree" | "sandbox";
   /** Model: provider/id, or alias `cheap` / `strong` resolved via env. */
   model?: string;

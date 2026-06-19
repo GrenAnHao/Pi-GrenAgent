@@ -1,7 +1,9 @@
-// 沙箱执行助手：SANDBOX_ENABLE=on 且沙箱可用时，把 py/js 代码一次性丢进 WSL2 srt 跑。
+// 沙箱执行助手：沙箱判据 sandboxOn() 为真时——SANDBOX_ENABLE≠off 且审批策略≠full 且 WSL2 沙箱可用——
+// 把 py/js 代码一次性丢进 WSL2 srt 跑；否则返回 null，调用方回退本地常驻内核。
 // 注意：沙箱模式下常驻内核语义（跨调用变量保留）退化为一次性执行（YAGNI，本期接受）。
-// owner 交互会话默认 SANDBOX_ENABLE=auto/未设 → 不路由、保持现有内核；不可信子进程
-// （im-platforms 无主人 / multi-agent sandbox 档）在子进程 env 里设 SANDBOX_ENABLE=on 触发。
+// owner 交互会话默认审批策略 auto（非 full）→ 沙箱可用时即路由进沙箱；选「完全访问」(full) 则关沙箱、
+// 回宿主内核。不可信子进程（im-platforms 无主人 / multi-agent sandbox 档）由父进程注入 SANDBOX_ENABLE=on，
+// 子代理内沙箱可用即走沙箱。
 import { randomBytes } from "node:crypto";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";

@@ -416,3 +416,16 @@ git commit -m "feat(approval): Tauri agent_set_approval 命令（任务 8）"
 **占位符扫描：** 任务4/7/8 标「实现时 grep 定位」是对齐指令（agent_set_mode / ModeAction 挂载点为现成模板），核心逻辑已给全。`isUnderCwd` 的 require 注释提示改用 `import { sep }`。
 
 **类型一致：** `ApprovalPolicy`("ask"|"auto"|"full")、`getApprovalPolicy/setApprovalPolicy/parseApproval/APPROVAL_LABELS`、`sandboxOn()`、`useApprovalStore.setLevel`、`pi.setApproval`、`agent_set_approval` 全程一致。前后端各有一份 ApprovalPolicy/labels（扩展侧 `_shared/approval.ts`、前端 `approvalStore.ts`），值一致。
+
+---
+
+## 实现落地说明（2026-06-19 回填，以代码为准）
+
+下列任务的最终实现相对上方 TDD 代码块有有意演进（功能已落地并通过测试）；上方代码块为历史草案，**实际以对应实现文件为准**：
+
+- **任务 2（`sandbox-gate.ts`）**：最终暴露**两个**判据而非单个 `sandboxOn`：`sandboxAvailable()`（策略无关：`SANDBOX_ENABLE≠off` 且可用）+ `sandboxOn()`（在其上再要求策略≠full）。测试同覆盖两者。
+- **任务 3（approval 扩展）**：`session_start` 回读顺序为 session entry → `parseApproval(getConfig("APPROVAL_POLICY"))`（子代理由父进程注入，实现策略继承）→ 默认 `auto`。
+- **任务 4（safety 门控）**：确认 UI 用 `ctx.ui.select(msg,["允许","拒绝"])`（非 `confirm`）；`ask` 在 **headless 降级为 auto、不阻断**（非「无 UI 默认 block」）；`ask` 额外覆盖外部 MCP 工具（`mcp__*`）。门控顺序见 `safety/index.ts` 的 ①~⑤ 注释。
+- **任务 5（消费者接线）**：code-exec 用 `sandboxOn()`；**im-platforms / multi-agent 改用 `sandboxAvailable()`**（不可信/显式隔离不被 owner 的 full 关掉），而非计划中统一的 `sandboxOn()`。
+- **任务 7（ApprovalAction 图标）**：`Hand`/`Shield`/`ShieldAlert`（对齐 Codex），非 `ShieldAlert/Shield/ShieldOff`。
+- **相关评审修复 commits**：`c9a4a39c`（full 不越子代理能力闸 / project_trust 认 full / ask 补 shell 越界写 / 子代理继承策略 headless 降级 auto）、`b07bff5f`（ask 拦 MCP + 网络）、`5a53396a`（mcp manager 写缓存用全名 `mcp__server__tool`）。
