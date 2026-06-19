@@ -29,28 +29,26 @@ export default function ModeAction() {
     void pi.setMode(workspace, target);
   };
 
-  // 紧凑图标按钮：触发器只显示当前模式图标（label 即图标，去掉 prefix 避免重复），
-  // hover 出名字、下拉项仍是「图标 + 文字」（optionRender）。
-  const options = AGENT_MODES.map((m) => ({ label: <Icon icon={MODE_ICONS[m]} size={14} />, value: m }));
+  // 下拉项用 optionRender 带图标；trigger 的当前图标用 prefix——两者分离，避免触发器上图标重复。
+  const options = AGENT_MODES.map((m) => ({ label: MODE_LABELS[m], value: m }));
 
   return (
-    <span title={`模式：${MODE_LABELS[mode]}`} style={{ display: 'inline-flex' }}>
-      <Select
-        size="small"
-        popupMatchSelectWidth={false}
-        disabled={!workspaceReady}
-        value={mode}
-        options={options}
-        optionRender={(option) => (
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <Icon icon={MODE_ICONS[option.value as AgentMode]} size={14} />
-            {MODE_LABELS[option.value as AgentMode]}
-          </span>
-        )}
-        placeholder="模式"
-        style={{ width: 'auto' }}
-        onChange={onChange}
-      />
-    </span>
+    <Select
+      size="small"
+      popupMatchSelectWidth={false}
+      disabled={!workspaceReady}
+      value={mode}
+      options={options}
+      optionRender={(option) => (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <Icon icon={MODE_ICONS[option.value as AgentMode]} size={14} />
+          {MODE_LABELS[option.value as AgentMode]}
+        </span>
+      )}
+      placeholder="模式"
+      prefix={MODE_ICONS[mode]}
+      style={{ width: 'auto', maxWidth: 120 }}
+      onChange={onChange}
+    />
   );
 }

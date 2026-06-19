@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Icon } from '@lobehub/ui';
 import { Select } from '@lobehub/ui/base-ui';
-import { Gauge } from 'lucide-react';
 import { useAgentStoreContext } from '../../../../stores/AgentStoreContext';
 import { useThinkingMemoryStore } from '../../../../stores/thinkingMemoryStore';
 import { pi } from '../../../../lib/pi';
@@ -90,23 +88,18 @@ export default function ThinkingAction() {
   if (options.length <= 1) return null;
   // 当前档位若不在集合内（罕见），补一个回显项避免下拉空白。
   const withCurrent = options.some((o) => o.value === level) ? options : [...options, { label: level, value: level }];
-  const labelOf = (v: string) => withCurrent.find((o) => o.value === v)?.label ?? v;
 
-  // 紧凑图标按钮：触发器只显示推理图标（hover 出当前档位、下拉有文字）。
   return (
-    <span title={`推理：${labelOf(level)}`} style={{ display: 'inline-flex' }}>
-      <Select
-        size="small"
-        popupMatchSelectWidth={false}
-        disabled={!workspaceReady || !ready}
-        value={level}
-        options={withCurrent.map((o) => ({ label: <Icon icon={Gauge} size={14} />, value: o.value }))}
-        optionRender={(option) => <span>{labelOf(option.value as string)}</span>}
-        placeholder="推理"
-        style={{ width: 'auto' }}
-        onChange={onChange}
-        onOpenChange={onOpenChange}
-      />
-    </span>
+    <Select
+      size="small"
+      popupMatchSelectWidth={false}
+      disabled={!workspaceReady || !ready}
+      value={level}
+      options={withCurrent}
+      placeholder="推理"
+      style={{ width: 'auto', maxWidth: 120 }}
+      onChange={onChange}
+      onOpenChange={onOpenChange}
+    />
   );
 }
