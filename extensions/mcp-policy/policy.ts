@@ -137,6 +137,7 @@ export function decide(
   toolName: string,
   args: Record<string, unknown>,
   hasUI: boolean,
+  approvalAsk = false,
 ): Decision {
   if (!toolName.startsWith("mcp__")) return { action: "pass" };
 
@@ -168,5 +169,8 @@ export function decide(
 
   if (!needApproval) return { action: "pass" };
   if (!hasUI) return { action: "block", code: "headless", reason: "需要审批但当前无界面（headless），已阻止" };
+  // owner 审批策略为 ask 时，safety 已对所有 mcp__* 工具统一确认过一次（粗粒度策略闸）；
+  // 此处不再二次弹窗避免双确认。disabled 已在上面拦截、headless 已 block，故仅降级 prompt→pass。
+  if (approvalAsk) return { action: "pass" };
   return { action: "prompt", recordable, summary: summarize(args) };
 }

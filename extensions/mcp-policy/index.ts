@@ -3,6 +3,7 @@ import { appendFileSync, mkdirSync, readFileSync, renameSync, statSync, writeFil
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { decide, parsePolicy, type Policy } from "./policy.js";
+import { getApprovalPolicy } from "../_shared/approval.js";
 
 const DIR = join(homedir(), ".pi");
 const POLICY_PATH = join(DIR, "mcp-policy.json");
@@ -81,7 +82,8 @@ export default function (pi: ExtensionAPI) {
     const policy = loadPolicy();
     const args = (event.input ?? {}) as Record<string, unknown>;
     const { server, tool } = parseToolName(toolName);
-    const d = decide(policy, toolName, args, ctx.hasUI);
+    // ask 审批策略下 safety 已统一确认 mcp__*，传入避免 mcp-policy 二次弹窗（disabled/headless 仍拦）。
+    const d = decide(policy, toolName, args, ctx.hasUI, getApprovalPolicy() === "ask");
 
     if (d.action === "pass") {
       audit(policy.audit.enabled, server, tool, "auto", args);

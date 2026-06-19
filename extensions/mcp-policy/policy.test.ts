@@ -154,4 +154,28 @@ describe("decide", () => {
       code: "headless",
     });
   });
+
+  // approvalAsk: owner 审批策略为 ask 时 safety 已统一确认外部 MCP，mcp-policy 不再二次弹窗。
+  it("approvalAsk downgrades a needs_approval prompt to pass (safety already confirmed)", () => {
+    expect(decide(withTool({ permission: "needs_approval" }), "mcp__s__t", {}, true, true)).toEqual({
+      action: "pass",
+    });
+  });
+  it("approvalAsk downgrades a danger-upgraded prompt to pass", () => {
+    expect(decide(withTool({ permission: "auto" }), "mcp__s__t", { command: "rm -rf /" }, true, true)).toEqual({
+      action: "pass",
+    });
+  });
+  it("approvalAsk does NOT bypass disabled", () => {
+    expect(decide(withTool({ permission: "disabled" }), "mcp__s__t", {}, true, true)).toMatchObject({
+      action: "block",
+      code: "disabled",
+    });
+  });
+  it("approvalAsk does NOT relax the headless block", () => {
+    expect(decide(withTool({ permission: "needs_approval" }), "mcp__s__t", {}, false, true)).toMatchObject({
+      action: "block",
+      code: "headless",
+    });
+  });
 });
