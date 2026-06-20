@@ -27,6 +27,7 @@ buildSystemPrompt()           # unchanged
 |-----|---------|---------|
 | `FABLE_BEHAVIOR` | `1` | Master switch |
 | `FABLE_BEHAVIOR_TIER2` | `1` | Include Tier-2 modules |
+| `FABLE_BEHAVIOR_TIER2_P1` | `1` | Include Tier-2 P1 extended modules (delegation, terminal-harness, verify-baseline, etc.) |
 | `FABLE_BEHAVIOR_TIER3_GUIDELINES` | `1` | Append Tier-3 summary block |
 | `FABLE_BEHAVIOR_SEED_AGENTS` | `1` | Seed enriched sub-agent templates if absent |
 
@@ -79,6 +80,22 @@ buildSystemPrompt()           # unchanged
 - Complements `diagram-hint`, `safety`, `loop-guard`, `agent-mode` — does not replace.
 - Excludes: Anthropic product ads, artifact storage API, tool JSON schemas, browser GIF rules.
 - Sub-agent seed: skip if `~/.pi/agent/agents/<name>.md` already exists.
+
+## Token budget (approximate, per turn)
+
+Measured via `estimatePromptTokens()` (chars / 4). Tier-3 **full** `.md` files on disk are not injected — only one-line summaries.
+
+| Profile | Config | ~tokens |
+|---------|--------|---------|
+| Minimal | `FABLE_BEHAVIOR_TIER2=0` | ~750 (Tier-1 only) + ~260 summaries if Tier-3 on |
+| Core harness | `FABLE_BEHAVIOR_TIER2_P1=0` | ~1,700 (Tier-1 + Tier-2 P0 + summaries) |
+| Default (full) | all `1` | ~3,000–3,700 (+ mode slice in plan/debug) |
+
+Other extensions also inject per turn (`diagram-hint` ~400 chars, `agent-mode` mode prompt in plan/debug, RAG/memory when enabled). Default fable-behavior is moderate — not catastrophic for 128k+ contexts, but use P1=0 or Tier2=0 on token-sensitive runs.
+
+Tier-2 P0 (always when Tier2 on): tool-discipline, grep-strategy, mcp-collaboration, refusal, skills-first, file-workflow.
+
+Tier-2 P1 (optional): conventions-first, verify-baseline, git-hygiene, editing-constraints, delegation, terminal-harness, knowledge-search-triggers.
 
 ## Tests
 

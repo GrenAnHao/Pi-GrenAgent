@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildFableBehaviorPrompt, resolveAgentModeFromEntries } from "./loader.js";
+import { buildFableBehaviorPrompt, estimatePromptTokens, resolveAgentModeFromEntries } from "./loader.js";
 
 describe("buildFableBehaviorPrompt", () => {
   it("includes tier1 harness rules", () => {
@@ -40,6 +40,17 @@ describe("buildFableBehaviorPrompt", () => {
     const p = buildFableBehaviorPrompt({ tier2: false, tier3Guidelines: true });
     expect(p).toContain("Quick reference");
     expect(p).toContain("Copyright");
+  });
+
+  it("tier2P1=false omits extended tier2 modules", () => {
+    const p = buildFableBehaviorPrompt({ tier2: true, tier2P1: false, tier3Guidelines: false });
+    expect(p).toContain("Tool discipline");
+    expect(p).not.toContain("Delegation");
+    expect(p).not.toContain("Terminal and sidecar harness");
+  });
+
+  it("token budget stays under 4k for default agent mode", () => {
+    expect(estimatePromptTokens({ tier2: true, tier2P1: true, tier3Guidelines: true, mode: "agent" })).toBeLessThan(4000);
   });
 });
 

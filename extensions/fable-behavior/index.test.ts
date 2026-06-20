@@ -25,6 +25,7 @@ const ctxWithMode = (mode: string) => ({
 afterEach(() => {
   delete process.env.FABLE_BEHAVIOR;
   delete process.env.FABLE_BEHAVIOR_TIER2;
+  delete process.env.FABLE_BEHAVIOR_TIER2_P1;
   delete process.env.FABLE_BEHAVIOR_TIER3_GUIDELINES;
 });
 
@@ -68,6 +69,18 @@ describe("fable-behavior extension", () => {
     const content = res?.message?.content ?? "";
     expect(content).toContain("## Coding harness");
     expect(content).not.toContain("Tool discipline");
+  });
+
+  it("FABLE_BEHAVIOR_TIER2_P1=0 omits extended tier2", async () => {
+    process.env.FABLE_BEHAVIOR_TIER2_P1 = "0";
+    const { pi, handlers } = makePi();
+    fableBehavior(pi);
+    const res = (await handlers["before_agent_start"]({}, ctxWithMode("agent"))) as
+      | { message?: { content?: string } }
+      | undefined;
+    const content = res?.message?.content ?? "";
+    expect(content).toContain("Tool discipline");
+    expect(content).not.toContain("Delegation");
   });
 });
 

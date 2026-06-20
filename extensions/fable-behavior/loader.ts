@@ -62,14 +62,22 @@ function readModeSlice(mode: FableAgentMode): string {
 
 export interface BuildPromptOptions {
   tier2?: boolean;
+  /** When false, inject only Tier-2 P0 (core harness); skip P1 extended modules. */
+  tier2P1?: boolean;
   tier3Guidelines?: boolean;
   mode?: FableAgentMode;
   date?: string;
 }
 
+/** Rough token estimate (chars / 4) for budgeting. */
+export function estimatePromptTokens(opts: BuildPromptOptions = {}): number {
+  return Math.ceil(buildFableBehaviorPrompt(opts).length / 4);
+}
+
 /** Assemble the fable-behavior injection block for before_agent_start. */
 export function buildFableBehaviorPrompt(opts: BuildPromptOptions = {}): string {
   const tier2 = opts.tier2 !== false;
+  const tier2P1 = opts.tier2P1 !== false;
   const tier3 = opts.tier3Guidelines !== false;
   const mode = opts.mode ?? "agent";
   const parts: string[] = ["[Fable Behavior]"];
@@ -78,7 +86,9 @@ export function buildFableBehaviorPrompt(opts: BuildPromptOptions = {}): string 
 
   if (tier2) {
     for (const name of TIER2_P0) parts.push(readModule("tier2", name));
-    for (const name of TIER2_P1) parts.push(readModule("tier2", name));
+    if (tier2P1) {
+      for (const name of TIER2_P1) parts.push(readModule("tier2", name));
+    }
   }
 
   const modeSlice = readModeSlice(mode);

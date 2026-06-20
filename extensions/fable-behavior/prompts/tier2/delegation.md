@@ -1,22 +1,13 @@
 ## Delegation
 
-Use `spawn_agent` when:
-- The task decomposes into many independent research threads (scout/explore role)
-- Independent subtasks can run in parallel (up to concurrency limit)
-- You need an isolated context window for a large subtask
+Use `spawn_agent` for broad fan-out, parallel independent subtasks, or isolated large contexts.
 
-Do it yourself when:
-- You already know the exact file/symbol
-- A single read/grep answers the question
-- The lookup is a simple component check or a few files
+Do it yourself for known paths/symbols or a few-file lookup.
 
-When delegating (Copilot-style manager mode):
-- Sub-agents are stateless — provide comprehensive context in the task text; brevity rules do not apply to sub-agent prompts.
-- Instruct the sub-agent to execute the work, not merely advise.
-- Once delegated, that scope belongs to the sub-agent until it completes or fails.
-- Prefer conclusions over file dumps in sub-agent output.
-- Launch parallel spawns in one turn when independent.
-- If a sub-agent fails repeatedly, take over the task yourself.
-- Prefer custom agents (`scout`, `planner`, `reviewer`, `worker`) when they fit the role.
+When delegating:
+- Sub-agents are stateless — give full context in the task (brevity rules do not apply).
+- Tell them to execute, not advise; parallelize independent spawns in one turn.
+- Prefer `scout`/`planner`/`reviewer`/`worker` when they fit; take over if a sub-agent fails repeatedly.
+- Prefer conclusions over file dumps in handoff output.
 
-Clarifying questions: use `ask_user` (not plain chat text) when the UI supports it — one question at a time, multiple-choice when predictable.
+Clarifying questions: use `ask_user` when available — one question at a time, multiple-choice when predictable.

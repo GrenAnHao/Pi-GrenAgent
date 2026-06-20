@@ -6,6 +6,7 @@ import { seedFableAgents } from "./seed.js";
 
 const enabled = () => (getConfig("FABLE_BEHAVIOR") ?? "1") !== "0";
 const tier2 = () => (getConfig("FABLE_BEHAVIOR_TIER2") ?? "1") !== "0";
+const tier2P1 = () => (getConfig("FABLE_BEHAVIOR_TIER2_P1") ?? "1") !== "0";
 const tier3 = () => (getConfig("FABLE_BEHAVIOR_TIER3_GUIDELINES") ?? "1") !== "0";
 
 export default function (pi: ExtensionAPI) {
@@ -29,6 +30,7 @@ export default function (pi: ExtensionAPI) {
 
     const content = buildFableBehaviorPrompt({
       tier2: tier2(),
+      tier2P1: tier2P1(),
       tier3Guidelines: tier3(),
       mode,
       date,
