@@ -30,6 +30,7 @@ import debugTools from "./debug-tools/index.js";
 import codeExec from "./code-exec/index.js";
 import hashline from "./hashline/index.js";
 import dap from "./dap/index.js";
+import fableBehavior from "./fable-behavior/index.js";
 import diagramHint from "./diagram-hint/index.js";
 import safety from "./safety/index.js";
 import approval from "./approval/index.js";
@@ -52,6 +53,7 @@ export {
   debugTools,
   dap,
   diagramHint,
+  fableBehavior,
   goal,
   knowledgeRag,
   longTermMemory,
@@ -92,6 +94,7 @@ export const allExtensions = [
   debugTools,
   dap,
   diagramHint,
+  fableBehavior,
   goal,
   knowledgeRag,
   longTermMemory,

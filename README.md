@@ -2,17 +2,71 @@
 
 本地优先的桌面 AI 编码 Agent。基于 Pi 运行时（`@earendil-works/pi-coding-agent`），把对话、工具调用、代码智能、知识库与记忆整合进一个 Tauri 桌面应用，全程在本地运行。
 
+<p align="center">
+  <img src="images/hero-code-graph.jpg" alt="代码图谱 · 227 个文件 · 674 条依赖" width="100%">
+</p>
+
 ## 特性
 
-- 多会话与项目管理：按项目分组的侧栏，支持置顶、重命名、右键菜单、在资源管理器中打开。
-- 流式对话：工具卡片、Mermaid 渲染、Plan / Questions / Answer 卡片、子代理（Sub-Agent）内联视图。
-- 知识库 RAG：文件分块后做向量或关键词检索，面板内用原生文件选择器添加文档。
-- 长期记忆：跨会话的记忆抽取与检索。
-- 代码智能：内置 CodeGraph，离线、零配置，基于 tree-sitter 与 SQLite。
-- 多供应商：多模型供应商配置与模型同步，生图、TTS、Embedding 等能力可分别选源。
-- 用量统计：按天、模型、项目聚合 Token 与费用。
-- 终端 Dock：终端 tab 容器，子代理会话独立成 tab。
-- IM 接入：微信（ilink 官方 bot）扫码登录，手机遥控 Agent；「连接」面板展示登录状态与会话只读镜像。
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="images/workspace-context.png" alt="多会话与项目管理" width="100%"><br>
+      <strong>多会话与项目管理</strong><br>
+      按项目分组的侧栏，支持置顶、重命名、右键菜单、在资源管理器中打开。
+    </td>
+    <td width="50%" valign="top">
+      <img src="images/chat-diagram.png" alt="流式对话" width="100%"><br>
+      <strong>流式对话</strong><br>
+      工具卡片、Mermaid 渲染、Plan / Questions / Answer 卡片、子代理（Sub-Agent）内联视图。
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="images/code-index.png" alt="代码智能" width="100%"><br>
+      <strong>代码智能</strong><br>
+      内置 CodeGraph，离线、零配置，基于 tree-sitter 与 SQLite。
+    </td>
+    <td width="50%" valign="top">
+      <img src="images/git-graph.png" alt="Git 集成" width="100%"><br>
+      <strong>Git 集成</strong><br>
+      改动 diff、分支切换、提交图谱，与 workspace 上下文一体。
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="images/providers.png" alt="多供应商" width="100%"><br>
+      <strong>多供应商</strong><br>
+      多模型供应商配置与模型同步，生图、TTS、Embedding 等能力可分别选源。
+    </td>
+    <td width="50%" valign="top">
+      <img src="images/mcp-servers.png" alt="MCP 扩展" width="100%"><br>
+      <strong>MCP 扩展</strong><br>
+      连接外部 MCP server，工具以 <code>mcp__&lt;server&gt;__&lt;tool&gt;</code> 暴露给 Agent，面板内测试连接与权限配置。
+    </td>
+  </tr>
+  <tr>
+    <td colspan="2" align="center" valign="top">
+      <table width="50%">
+        <tr>
+          <td valign="top">
+            <img src="images/skills.png" alt="Skills 工作流" width="100%"><br>
+            <strong>Skills 工作流</strong><br>
+            从 <code>~/.agents/skills</code> 加载技能，<code>/skill:name</code> 调用，面板内启用/禁用。
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+
+此外还支持：
+
+- **知识库 RAG** — 文件分块后做向量或关键词检索，面板内用原生文件选择器添加文档。
+- **长期记忆** — 跨会话的记忆抽取与检索。
+- **用量统计** — 按天、模型、项目聚合 Token 与费用。
+- **终端 Dock** — 终端 tab 容器，子代理会话独立成 tab。
+- **IM 接入** — 微信（ilink 官方 bot）扫码登录，手机遥控 Agent；「连接」面板展示登录状态与会话只读镜像。
 
 ## 架构
 

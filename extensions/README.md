@@ -8,10 +8,11 @@
 |---|---|---|---|
 | [`knowledge-rag`](./knowledge-rag) | `kb_search` `kb_add` `/kb` | 可选(语义) | 本地知识库 RAG + 提问自动注入 |
 | [`long-term-memory`](./long-term-memory) | `memory_save` `memory_recall` `/memory` | 可选(语义) | 两级长期记忆 + 自动召回 + 「记住:」自动捕获 |
-| [`web-fetch`](./web-fetch) | `fetch_url` | 否 | 网页抓取转 markdown(SSRF 防护) |
+| [`web-fetch`](./web-fetch) | `fetch_url` `fetch_html` `fetch_markdown` `fetch_txt` `fetch_json` | 否 | 网页抓取(SSRF 防护) |
 | [`image-gen`](./image-gen) | `generate_image` | 是 | 文生图(OpenAI 兼容) |
 | [`code-review`](./code-review) | `git_diff` `review_note` `/review` | 否 | 结构化代码审查 + 报告 |
 | [`multi-agent`](./multi-agent) | `spawn_agent` | 子 agent 需 | 委派隔离 pi 子进程(单个/并行) |
+| [`fable-behavior`](./fable-behavior) | — | 否 | Fable 5 + coding-agent 行为层(Tier 注入 + 子 agent 种子) |
 | [`tts`](./tts) | `speak` | 是 | 文字转语音(OpenAI 兼容) |
 | [`im-gateway`](./im-gateway) | `/imgateway` + webhook | 否 | HTTP 网关,接入 IM 平台 |
 

@@ -1,0 +1,19 @@
+{
+  "name": "pi-fable-behavior",
+  "version": "0.1.0",
+  "description": "Distilled Fable 5 + coding-agent behavioral system prompt layer for Pi.",
+  "private": true,
+  "type": "module",
+  "keywords": ["pi-package", "pi-extension", "system-prompt", "behavior"],
+  "license": "MIT",
+  "pi": {
+    "extensions": ["./index.ts"]
+  },
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "vitest": "^4.1.8"
+  }
+}

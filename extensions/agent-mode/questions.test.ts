@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { makeQuestionsId, normalizeQuestions, type RawQuestion } from "./questions.js";
+import {
+  CUSTOM_OPTION_ID,
+  makeQuestionsId,
+  normalizeQuestions,
+  type RawQuestion,
+} from "./questions.js";
 
 describe("makeQuestionsId", () => {
   it("formats as q-<base36 timestamp>-<rand>", () => {
@@ -25,6 +30,7 @@ describe("normalizeQuestions", () => {
             { id: "o2", label: "B方案" },
           ],
           allowMultiple: true,
+          allowCustom: false,
         },
       ],
     });
@@ -33,6 +39,45 @@ describe("normalizeQuestions", () => {
   it("keeps explicit option ids", () => {
     const raw: RawQuestion[] = [{ question: "Q", options: [{ id: "yes", label: "是" }] }];
     expect(normalizeQuestions(raw, "q-1")?.questions[0].options).toEqual([{ id: "yes", label: "是" }]);
+  });
+
+  it("appends custom option when allowCustom", () => {
+    const raw: RawQuestion[] = [{ question: "Q", options: [{ label: "A" }], allowCustom: true, customLabel: "其它" }];
+    const out = normalizeQuestions(raw, "q-1");
+    expect(out?.questions[0].allowCustom).toBe(true);
+    expect(out?.questions[0].options).toEqual([
+      { id: "o1", label: "A" },
+      { id: CUSTOM_OPTION_ID, label: "其它" },
+    ]);
+  });
+
+  it("does not duplicate custom option when id is already __custom__", () => {
+    const raw: RawQuestion[] = [
+      {
+        question: "Q",
+        allowCustom: true,
+        options: [{ id: CUSTOM_OPTION_ID, label: "已有自定义" }],
+      },
+    ];
+    expect(normalizeQuestions(raw, "q-1")?.questions[0].options).toEqual([
+      { id: CUSTOM_OPTION_ID, label: "已有自定义" },
+    ]);
+  });
+
+  it("passes card-level allowExtra flags", () => {
+    const raw: RawQuestion[] = [{ question: "Q", options: [{ label: "A" }] }];
+    expect(
+      normalizeQuestions(raw, "q-1", { allowExtra: true, allowExtraImages: false, extraPlaceholder: "备注" }),
+    ).toEqual({
+      kind: "questions",
+      id: "q-1",
+      allowExtra: true,
+      allowExtraImages: false,
+      extraPlaceholder: "备注",
+      questions: [
+        { id: "q1", title: "Q", options: [{ id: "o1", label: "A" }], allowMultiple: false, allowCustom: false },
+      ],
+    });
   });
 
   it("skips blank questions and blank options", () => {
@@ -47,6 +92,7 @@ describe("normalizeQuestions", () => {
       title: "有效",
       options: [{ id: "o1", label: "ok" }],
       allowMultiple: false,
+      allowCustom: false,
     });
   });
 
@@ -54,4 +100,15 @@ describe("normalizeQuestions", () => {
     expect(normalizeQuestions([{ question: "" }], "q-1")).toBeNull();
     expect(normalizeQuestions([], "q-1")).toBeNull();
   });
+
+  it("caps questions at 8", () => {
+    const raw: RawQuestion[] = Array.from({ length: 11 }, (_, i) => ({
+      question: `Q${i + 1}`,
+      options: [{ label: "x" }],
+    }));
+    const out = normalizeQuestions(raw, "q-1");
+    expect(out?.questions).toHaveLength(8);
+    expect(out?.questions[7].title).toBe("Q8");
+  });
 });
+

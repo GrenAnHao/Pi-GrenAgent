@@ -82,6 +82,7 @@ export default function (pi: ExtensionAPI) {
       "Use spawn_agent to parallelize independent sub-tasks or to isolate a large exploration from the main context.",
       "Each sub-agent starts fresh — include all context it needs in the task text.",
       "Use `agent` for a specialized role (e.g. scout/planner/reviewer); use `chain` to pipe one step's output into the next via {previous}.",
+      "Prefer scout for broad fan-out; do simple single-file lookups yourself.",
     ],
     parameters: Type.Object({
       task: Type.Optional(Type.String({ description: "A single task for one sub-agent" })),
