@@ -46,6 +46,15 @@ if (existsSync(piPkgDist)) {
     const from = join(piPkgDist, dir);
     if (existsSync(from)) cpSync(from, join(binDir, dir), { recursive: true });
   }
+
+  // 兼容新版 pi 把内置主题挪到了 dist/modes/interactive/theme/
+  // 运行时仍按 <PI_PACKAGE_DIR>/theme/dark.json 读取，所以额外复制一份到 binaries/theme
+  const interactiveTheme = join(piPkgDist, 'modes', 'interactive', 'theme');
+  if (existsSync(interactiveTheme)) {
+    cpSync(interactiveTheme, join(binDir, 'theme'), { recursive: true });
+    console.log('Copied built-in themes from modes/interactive/theme.');
+  }
+
   for (const file of ['package.json', 'README.md', 'CHANGELOG.md', 'photon_rs_bg.wasm']) {
     const from = join(piPkgDist, file);
     if (existsSync(from)) copyFileSync(from, join(binDir, file));
