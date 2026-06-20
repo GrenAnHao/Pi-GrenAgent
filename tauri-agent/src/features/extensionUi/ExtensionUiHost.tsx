@@ -6,6 +6,8 @@ import { useGoalStore, type GoalInfo } from '../../stores/goalStore';
 import { useMcpStatusStore, type McpServerStatus } from '../../stores/mcpStatusStore';
 import { isAgentMode, useModeStore } from '../../stores/modeStore';
 import { useUiPromptStore } from '../../stores/uiPromptStore';
+import { useInlineQuestionStore } from '../../stores/inlineQuestionStore';
+import { parseAskUserPayload } from '../../components/QuestionSelector/answers';
 import { isApprovalPolicy, useApprovalStore } from '../../stores/approvalStore';
 import { useWechatStatusStore, type WechatStatus } from '../../stores/wechatStatusStore';
 import { useImMessagesStore, type ImConversation } from '../../stores/imMessagesStore';
@@ -111,7 +113,15 @@ export function ExtensionUiHost() {
         if (text) message[notifyLevel(e.request as Record<string, unknown>)](text);
         return;
       }
-      // 交互请求 → 输入框上方内联卡片（PromptRequestCard 渲染并回传），不弹窗。
+      // ask_user 富卡：经 ctx.ui.input 载荷传来，内联渲染到消息流末尾（而非输入框上方）。
+      if (method === 'input') {
+        const data = parseAskUserPayload((e.request as { title?: unknown }).title);
+        if (data) {
+          useInlineQuestionStore.getState().setRequest({ workspace: e.workspace, id: e.request.id, data });
+          return;
+        }
+      }
+      // 其余交互请求 → 输入框上方内联卡片（PromptRequestCard 渲染并回传），不弹窗。
       if (method === 'confirm' || method === 'select' || method === 'input') {
         useUiPromptStore.getState().setRequest({ workspace: e.workspace, request: e.request });
       }
