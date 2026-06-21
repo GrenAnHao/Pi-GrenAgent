@@ -267,8 +267,8 @@ export const pi = {
   /** Mermaid 渲染失败时的非流式一次性修复：用当前会话模型生成修正后的 mermaid 代码（不进对话历史）。 */
   fixMermaid: (workspace: string, code: string, error: string) =>
     invoke<string>('fix_mermaid_diagram', { workspace, code, error }),
-  diagnoseProviderModel: (providerId: string, modelId: string, prompt: string) =>
-    invoke<DiagnoseResult>('diagnose_provider_model', { providerId, modelId, prompt }),
+  diagnoseProviderModel: (providerId: string, modelId: string, prompt: string, stream: boolean) =>
+    invoke<DiagnoseResult>('diagnose_provider_model', { providerId, modelId, prompt, stream }),
   subagentList: (workspace: string) => invoke<SubAgentItem[]>('subagent_list', { workspace }),
   subagentCancel: (workspace: string, agentId: string) =>
     invoke<void>('subagent_cancel', { workspace, agentId }),

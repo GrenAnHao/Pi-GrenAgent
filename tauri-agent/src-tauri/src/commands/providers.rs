@@ -779,6 +779,7 @@ pub async fn diagnose_provider_model(
     provider_id: String,
     model_id: String,
     prompt: String,
+    stream: bool,
     app: tauri::AppHandle,
 ) -> Result<DiagnoseResult, String> {
     use std::time::Instant;
@@ -790,7 +791,7 @@ pub async fn diagnose_provider_model(
         prompt
     };
 
-    if entry.api.as_str() == "openai-completions" || entry.api.is_empty() {
+    if stream && (entry.api.as_str() == "openai-completions" || entry.api.is_empty()) {
         return diagnose_openai_stream(&entry, &model_id, &user).await;
     }
 

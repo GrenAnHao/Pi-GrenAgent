@@ -1,5 +1,5 @@
 import { Button, Icon } from '@lobehub/ui';
-import { Input, Select } from 'antd';
+import { Input, Radio, Select } from 'antd';
 import { createStaticStyles, cssVar, cx } from 'antd-style';
 import { Activity, ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -136,6 +136,7 @@ interface Props {
 export function ProviderDiagnostics({ providerId, modelIds, hasApiKey }: Props) {
   const [modelId, setModelId] = useState(modelIds[0] ?? '');
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
+  const [stream, setStream] = useState(true);
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<DiagnoseResult | null>(null);
   const [open, setOpen] = useState(false);
@@ -150,7 +151,7 @@ export function ProviderDiagnostics({ providerId, modelIds, hasApiKey }: Props) 
     setRunning(true);
     setResult(null);
     try {
-      const out = await pi.diagnoseProviderModel(providerId, modelId.trim(), prompt);
+      const out = await pi.diagnoseProviderModel(providerId, modelId.trim(), prompt, stream);
       setResult(out);
     } catch (e) {
       setResult({
@@ -208,6 +209,17 @@ export function ProviderDiagnostics({ providerId, modelIds, hasApiKey }: Props) 
               variant="filled"
               onChange={(e) => setPrompt(e.target.value)}
             />
+          </div>
+          <div className={styles.field}>
+            <div className={styles.label}>请求模式</div>
+            <Radio.Group
+              data-testid="prov-diag-stream"
+              value={stream}
+              onChange={(e) => setStream(Boolean(e.target.value))}
+            >
+              <Radio value={true}>流式（SSE，测 TTFT / token 速率）</Radio>
+              <Radio value={false}>非流式（一次性，部分供应商仅支持此模式）</Radio>
+            </Radio.Group>
           </div>
           <div className={styles.actions}>
             <Button
