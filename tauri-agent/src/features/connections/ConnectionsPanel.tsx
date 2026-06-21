@@ -1,7 +1,7 @@
 import { Button, Flexbox, Icon } from '@lobehub/ui';
 import { Modal, Switch } from 'antd';
 import { cssVar } from 'antd-style';
-import { ChevronDown, ChevronRight, MessageSquare, Settings2 } from 'lucide-react';
+import { MessageSquare, Settings2 } from 'lucide-react';
 import { type CSSProperties, useEffect, useState } from 'react';
 import { useImMessagesStore } from '../../stores/imMessagesStore';
 import { useWechatStatusStore } from '../../stores/wechatStatusStore';
@@ -25,7 +25,7 @@ const bubbleStyle = (role: 'user' | 'assistant'): CSSProperties => ({
   whiteSpace: 'pre-wrap',
   wordBreak: 'break-word',
   background: role === 'user' ? cssVar.colorPrimary : 'var(--gren-surface, rgba(255,255,255,0.06))',
-  color: role === 'user' ? '#fff' : 'inherit',
+  color: role === 'user' ? '#fff' : cssVar.colorText,
 });
 
 // 网络配置项（齿轮弹窗）= 微信字段去掉「启用」开关本身（启用由卡片上的接入开关控制）。
@@ -141,13 +141,12 @@ export function ConnectionsPanel() {
 
           {/* 微信会话只读镜像：微信启用即常驻入口，无消息给空态。主人会话不含微信流量，这里是 UI 唯一能看到「微信聊了什么」的地方 */}
           {wechatEnabled ? (
-            <Flexbox gap={6} style={{ marginInlineStart: 26, marginBlockStart: 2 }}>
+            <div style={{ marginInlineStart: 26, marginBlockStart: 2 }}>
               <button
                 type="button"
                 data-testid="wechat-msgs-toggle"
-                onClick={() => setMsgsOpen((v) => !v)}
+                onClick={() => setMsgsOpen(true)}
                 style={{
-                  alignSelf: 'flex-start',
                   display: 'flex',
                   alignItems: 'center',
                   gap: 4,
@@ -159,39 +158,10 @@ export function ConnectionsPanel() {
                   cursor: 'pointer',
                 }}
               >
-                <Icon icon={msgsOpen ? ChevronDown : ChevronRight} size={12} />
+                <Icon icon={MessageSquare} size={12} />
                 微信会话记录（{totalMessages}）
               </button>
-              {msgsOpen ? (
-                totalMessages > 0 ? (
-                  <Flexbox
-                    gap={12}
-                    data-testid="wechat-msgs"
-                    style={{ maxHeight: 300, overflowY: 'auto', paddingInlineEnd: 4 }}
-                  >
-                    {conversations.map((conv) => (
-                      <Flexbox key={conv.user} gap={6}>
-                        {conversations.length > 1 ? (
-                          <span style={{ fontSize: 10, color: muted, alignSelf: 'center' }}>{conv.user}</span>
-                        ) : null}
-                        {conv.messages.map((m, i) => (
-                          <div key={`${conv.user}-${i}`} style={bubbleStyle(m.role)}>
-                            {m.text}
-                          </div>
-                        ))}
-                      </Flexbox>
-                    ))}
-                  </Flexbox>
-                ) : (
-                  <span
-                    data-testid="wechat-msgs-empty"
-                    style={{ fontSize: 12, color: muted, paddingBlock: 2 }}
-                  >
-                    暂无微信会话；微信登录后，收发的消息会镜像到这里。
-                  </span>
-                )
-              ) : null}
-            </Flexbox>
+            </div>
           ) : null}
         </Flexbox>
       </div>
@@ -223,6 +193,36 @@ export function ConnectionsPanel() {
             <span style={{ fontSize: 13, color: muted }}>正在获取二维码…（请确保已启用微信接入）</span>
           )}
         </Flexbox>
+      </Modal>
+
+      {/* 会话记录弹窗 */}
+      <Modal
+        open={msgsOpen}
+        title={`微信会话记录（${totalMessages}）`}
+        footer={null}
+        width={520}
+        onCancel={() => setMsgsOpen(false)}
+        data-testid="wechat-msgs-modal"
+        styles={{ body: { maxHeight: '60vh', overflowY: 'auto', padding: '12px 0 4px' } }}
+      >
+        {totalMessages > 0 ? (
+          <Flexbox gap={12} data-testid="wechat-msgs">
+            {conversations.map((conv) => (
+              <Flexbox key={conv.user} gap={6}>
+                {conversations.length > 1 ? (
+                  <span style={{ fontSize: 10, color: muted, alignSelf: 'center' }}>{conv.user}</span>
+                ) : null}
+                {conv.messages.map((m, i) => (
+                  <div key={`${conv.user}-${i}`} style={bubbleStyle(m.role)}>{m.text}</div>
+                ))}
+              </Flexbox>
+            ))}
+          </Flexbox>
+        ) : (
+          <span data-testid="wechat-msgs-empty" style={{ fontSize: 13, color: muted }}>
+            暂无微信会话；微信登录后，收发的消息会镜像到这里。
+          </span>
+        )}
       </Modal>
 
       {/* 网络配置弹窗（齿轮） */}
