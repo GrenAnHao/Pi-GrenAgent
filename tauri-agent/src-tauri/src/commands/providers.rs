@@ -776,7 +776,104 @@ async fn diagnose_openai_stream(
     })
 }
 
-/// 供应商模型测活：发一条用户消息，返回连通性、首字耗时、总耗时、token 与速率。
+async fn diagnose_anthropic_stream(
+    entry: &ProviderEntry, model_id: &str, prompt: &str, on_chunk: &Channel<String>,
+) -> Result<DiagnoseResult, String> {
+    use futures_util::StreamExt;
+    use std::time::Instant;
+    let base = entry.base_url.trim().trim_end_matches('/');
+    let url = if base.ends_with("/v1") { format!("{base}/messages") } else { format!("{base}/v1/messages") };
+    let body = serde_json::json!({ "model": model_id, "max_tokens": 1024, "stream": true,
+        "messages": [{"role": "user", "content": prompt}] });
+    let client = reqwest::Client::builder().timeout(std::time::Duration::from_secs(120)).build().map_err(|e| e.to_string())?;
+    let start = Instant::now();
+    let resp = client.post(&url)
+        .header("content-type", "application/json")
+        .header("x-api-key", entry.api_key.trim())
+        .header("anthropic-version", "2023-06-01")
+        .body(serde_json::to_string(&body).map_err(|e| e.to_string())?)
+        .send().await.map_err(|e| e.to_string())?;
+    let status = resp.status();
+    if !status.is_success() { return Err(format!("HTTP {}: {}", status.as_u16(), truncate_body(&resp.text().await.unwrap_or_default()))); }
+    let (mut ttft_ms, mut content, mut prompt_tokens, mut completion_tokens, mut got_first) = (0u64, String::new(), None, None, false);
+    let stream = resp.bytes_stream(); tokio::pin!(stream); let mut buf = String::new();
+    while let Some(chunk) = stream.next().await {
+        buf.push_str(&String::from_utf8_lossy(&chunk.map_err(|e| e.to_string())?));
+        while let Some(pos) = buf.find('\n') {
+            let line = buf[..pos].trim().to_string(); buf = buf[pos + 1..].to_string();
+            if !line.starts_with("data:") { continue; }
+            let data = line.trim_start_matches("data:").trim();
+            if data.is_empty() { continue; }
+            let Ok(v) = serde_json::from_str::<serde_json::Value>(data) else { continue };
+            match v.get("type").and_then(|t| t.as_str()) {
+                Some("message_start") => { prompt_tokens = v.get("message").and_then(|m| m.get("usage")).and_then(|u| u.get("input_tokens")).and_then(|x| x.as_u64()); }
+                Some("content_block_delta") => {
+                    if let Some(text) = v.get("delta").and_then(|d| d.get("text")).and_then(|t| t.as_str()) {
+                        if !text.is_empty() {
+                            if !got_first { got_first = true; ttft_ms = start.elapsed().as_millis() as u64; }
+                            content.push_str(text); let _ = on_chunk.send(text.to_string());
+                        }
+                    }
+                }
+                Some("message_delta") => { completion_tokens = v.get("usage").and_then(|u| u.get("output_tokens")).and_then(|x| x.as_u64()); }
+                _ => {}
+            }
+        }
+    }
+    let total_ms = start.elapsed().as_millis() as u64;
+    if !got_first { ttft_ms = total_ms; }
+    if content.trim().is_empty() { return Err("模型未返回有效内容".into()); }
+    let tokens_per_sec = completion_tokens.and_then(|c| if total_ms == 0 { None } else { Some(c as f64 / (total_ms as f64 / 1000.0)) });
+    Ok(DiagnoseResult { ok: true, error: None, content, ttft_ms, total_ms, prompt_tokens, completion_tokens, total_tokens: None, tokens_per_sec })
+}
+
+async fn diagnose_google_stream(
+    entry: &ProviderEntry, model_id: &str, prompt: &str, on_chunk: &Channel<String>,
+) -> Result<DiagnoseResult, String> {
+    use futures_util::StreamExt;
+    use std::time::Instant;
+    let base = entry.base_url.trim().trim_end_matches('/');
+    let root = if base.ends_with("/v1beta") || base.ends_with("/v1") { base.to_string() } else { format!("{base}/v1beta") };
+    let url = format!("{root}/models/{model_id}:streamGenerateContent");
+    let body = serde_json::json!({ "contents": [{"role": "user", "parts": [{"text": prompt}]}] });
+    let client = reqwest::Client::builder().timeout(std::time::Duration::from_secs(120)).build().map_err(|e| e.to_string())?;
+    let start = Instant::now();
+    let resp = client.post(&url).query(&[("key", entry.api_key.trim()), ("alt", "sse")])
+        .header("content-type", "application/json")
+        .body(serde_json::to_string(&body).map_err(|e| e.to_string())?)
+        .send().await.map_err(|e| e.to_string())?;
+    let status = resp.status();
+    if !status.is_success() { return Err(format!("HTTP {}: {}", status.as_u16(), truncate_body(&resp.text().await.unwrap_or_default()))); }
+    let (mut ttft_ms, mut content, mut prompt_tokens, mut completion_tokens, mut got_first) = (0u64, String::new(), None, None, false);
+    let stream = resp.bytes_stream(); tokio::pin!(stream); let mut buf = String::new();
+    while let Some(chunk) = stream.next().await {
+        buf.push_str(&String::from_utf8_lossy(&chunk.map_err(|e| e.to_string())?));
+        while let Some(pos) = buf.find('\n') {
+            let line = buf[..pos].trim().to_string(); buf = buf[pos + 1..].to_string();
+            if !line.starts_with("data:") { continue; }
+            let data = line.trim_start_matches("data:").trim();
+            if data.is_empty() { continue; }
+            let Ok(v) = serde_json::from_str::<serde_json::Value>(data) else { continue };
+            if let Some(text) = v.get("candidates").and_then(|c| c.as_array()).and_then(|a| a.first())
+                .and_then(|c| c.get("content")).and_then(|c| c.get("parts")).and_then(|p| p.as_array())
+                .and_then(|a| a.first()).and_then(|p| p.get("text")).and_then(|t| t.as_str()) {
+                if !text.is_empty() {
+                    if !got_first { got_first = true; ttft_ms = start.elapsed().as_millis() as u64; }
+                    content.push_str(text); let _ = on_chunk.send(text.to_string());
+                }
+            }
+            if let Some(u) = v.get("usageMetadata") {
+                prompt_tokens = u.get("promptTokenCount").and_then(|x| x.as_u64());
+                completion_tokens = u.get("candidatesTokenCount").and_then(|x| x.as_u64());
+            }
+        }
+    }
+    let total_ms = start.elapsed().as_millis() as u64;
+    if !got_first { ttft_ms = total_ms; }
+    if content.trim().is_empty() { return Err("模型未返回有效内容".into()); }
+    let tokens_per_sec = completion_tokens.and_then(|c| if total_ms == 0 { None } else { Some(c as f64 / (total_ms as f64 / 1000.0)) });
+    Ok(DiagnoseResult { ok: true, error: None, content, ttft_ms, total_ms, prompt_tokens, completion_tokens, total_tokens: None, tokens_per_sec })
+}
 #[tauri::command]
 pub async fn diagnose_provider_model(
     provider_id: String,
@@ -791,13 +888,13 @@ pub async fn diagnose_provider_model(
     let entry = provider_entry(&app, &provider_id)?;
     let user = if prompt.trim().is_empty() { "Who are you?".to_string() } else { prompt };
 
-    // OpenAI 兼容类型（含未显式指定 api 的默认情况）均支持流式
-    let is_openai_compat = entry.api.is_empty()
-        || entry.api.starts_with("openai")
-        || entry.api == "openai-completions"
-        || entry.api == "openai-responses";
-    if stream && is_openai_compat {
-        return diagnose_openai_stream(&entry, &model_id, &user, &on_chunk).await;
+    if stream {
+        return match entry.api.as_str() {
+            "anthropic-messages" => diagnose_anthropic_stream(&entry, &model_id, &user, &on_chunk).await,
+            "google-generative-ai" => diagnose_google_stream(&entry, &model_id, &user, &on_chunk).await,
+            // openai-completions、openai-responses、空（默认）及其它 openai-* 兼容类型
+            _ => diagnose_openai_stream(&entry, &model_id, &user, &on_chunk).await,
+        };
     }
 
     // 非流式：一次性请求，内容整体推给前端一次
