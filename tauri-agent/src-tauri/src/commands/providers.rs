@@ -156,6 +156,48 @@ pub async fn refresh_model_registry(
 }
 
 #[derive(serde::Deserialize)]
+struct ProbeModelsOut {
+    ok: bool,
+    #[serde(default)]
+    models: Vec<serde_json::Value>,
+    #[serde(default)]
+    error: Option<String>,
+}
+
+/// 项目无关地列出 ModelRegistry 解析后的模型：spawn 短命 `pi probe-models`（不起 RPC 运行时、不要
+/// workspace），解析其 stdout 的单行 JSON。供未打开项目 / 冷启动 / 真对话模式的模型选择器使用。
+/// 失败时调用方可回退 fetch_provider_models（仅 id 列表）。复用 probe_mcp_server 同款 sidecar spawn。
+#[tauri::command]
+pub async fn list_models_global(app: tauri::AppHandle) -> Result<Vec<serde_json::Value>, String> {
+    use tauri_plugin_shell::ShellExt;
+    let package_dir = crate::pi::sidecar::pi_package_dir();
+    let output = app
+        .shell()
+        .sidecar("pi")
+        .map_err(|e| format!("sidecar lookup failed: {e}"))?
+        .args(["probe-models"])
+        .env("PI_PACKAGE_DIR", package_dir)
+        .output()
+        .await
+        .map_err(|e| format!("probe-models spawn failed: {e}"))?;
+    if !output.status.success() {
+        return Err(format!(
+            "probe-models exited ({:?}): {}",
+            output.status.code(),
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let line = stdout.lines().last().unwrap_or("").trim();
+    let parsed: ProbeModelsOut =
+        serde_json::from_str(line).map_err(|e| format!("probe-models 输出解析失败: {e}; 原文: {line}"))?;
+    if !parsed.ok {
+        return Err(parsed.error.unwrap_or_else(|| "probe-models failed".into()));
+    }
+    Ok(parsed.models)
+}
+
+#[derive(serde::Deserialize)]
 struct IdModel {
     id: String,
 }

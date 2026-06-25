@@ -130,6 +130,7 @@ pub fn run() {
             commands::providers::get_provider_config,
             commands::providers::set_provider_config,
             commands::providers::refresh_model_registry,
+            commands::providers::list_models_global,
             commands::providers::fetch_provider_models,
             commands::providers::fix_mermaid_diagram,
             commands::providers::diagnose_provider_model,
