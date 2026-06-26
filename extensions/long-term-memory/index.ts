@@ -22,6 +22,7 @@ import { type EmbeddingConfig, resolveEmbeddingConfig } from "./embedding.js";
 import { askMemoryLlm, resolveMemoryModel } from "./llm.js";
 import { type MemoryHit, MemoryStore, type RecallFilters } from "./store.js";
 import { getConfig } from "../_shared/runtime-config.js";
+import { messageToText } from "../_shared/transcript.js";
 
 const autoInject = () => (getConfig("MEMORY_AUTO_INJECT") ?? "1") !== "0";
 const autoInjectTopK = () => Number(getConfig("MEMORY_AUTO_TOPK") ?? "5") || 5;
@@ -33,22 +34,6 @@ const smartNotice = () => (getConfig("MEMORY_SMART_NOTICE") ?? "1") !== "0";
 const memoryModel = () => getConfig("MEMORY_MODEL");
 
 type ScopedHit = MemoryHit & { scope: "project" | "global" };
-
-function messageToText(m: unknown): string {
-  const obj = (m ?? {}) as { role?: string; content?: unknown; message?: { role?: string; content?: unknown } };
-  const role = obj.role ?? obj.message?.role ?? "";
-  const content = obj.content ?? obj.message?.content;
-  let text = "";
-  if (typeof content === "string") {
-    text = content;
-  } else if (Array.isArray(content)) {
-    text = content
-      .filter((p): p is { type: string; text: string } => !!p && typeof p === "object" && (p as { type?: string }).type === "text")
-      .map((p) => p.text)
-      .join(" ");
-  }
-  return text ? `${role}: ${text}` : "";
-}
 
 export default function (pi: ExtensionAPI) {
   let projectStore: MemoryStore | undefined;

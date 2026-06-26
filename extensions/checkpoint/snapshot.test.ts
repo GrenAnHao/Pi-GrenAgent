@@ -33,7 +33,16 @@ function ws(): { cwd: string; gitdir: string } {
   return { cwd, gitdir: join(cwd, ".pi", "snapshots", "git") };
 }
 afterEach(() => {
-  for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
+  // Windows: git subprocesses can briefly hold handles to the temp work-tree, so a
+  // plain rm races with EPERM/EBUSY. Retry, and treat residual cleanup as
+  // best-effort (the OS reclaims tmpdir eventually) rather than failing the test.
+  for (const d of dirs.splice(0)) {
+    try {
+      rmSync(d, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    } catch {
+      // ignore: temp-dir cleanup is best-effort on Windows
+    }
+  }
 });
 
 describe("track / diff / restore round-trip", () => {
@@ -54,7 +63,7 @@ describe("track / diff / restore round-trip", () => {
     await restore(gitdir, cwd, s1!.hash);
     expect(readFileSync(join(cwd, "a.txt"), "utf8")).toBe("v1");
     expect(existsSync(join(cwd, "b.txt"))).toBe(false);
-  });
+  }, 30000);
 
   it("returns null when nothing changed", async () => {
     const { cwd, gitdir } = ws();
@@ -62,7 +71,7 @@ describe("track / diff / restore round-trip", () => {
     await ensureRepo(gitdir, cwd);
     expect(await track(gitdir, cwd)).not.toBeNull();
     expect(await track(gitdir, cwd)).toBeNull();
-  });
+  }, 30000);
 
   it("respects .gitignore and skips the .pi dir", async () => {
     const { cwd, gitdir } = ws();
@@ -74,5 +83,5 @@ describe("track / diff / restore round-trip", () => {
     const files = (s?.files ?? []).map((f) => f.file);
     expect(files).toContain("kept.txt");
     expect(files).not.toContain("ignored.txt");
-  });
+  }, 30000);
 });

@@ -17,6 +17,16 @@ describe('NoticePill', () => {
     expect(screen.getByTestId('notice-pill').textContent).toContain('已注入长期记忆');
   });
 
+  it('shows self-evolve dream start title', () => {
+    render(<NoticePill customType="self-evolve-dream-start" content="- running" />);
+    expect(screen.getByTestId('notice-pill').textContent).toContain('Dream 已启动');
+  });
+
+  it('shows self-evolve auto done title', () => {
+    render(<NoticePill customType="self-evolve-dream-done" content="- done" />);
+    expect(screen.getByTestId('notice-pill').textContent).toContain('Auto Dream 已完成');
+  });
+
   it('falls back to a generic title for unknown customType', () => {
     render(<NoticePill customType="other" content="x" />);
     expect(screen.getByTestId('notice-pill').textContent).toContain('已注入上下文');

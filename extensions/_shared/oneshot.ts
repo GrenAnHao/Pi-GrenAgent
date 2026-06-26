@@ -57,7 +57,7 @@ export async function runOneshot(): Promise<void> {
   const { req } = parsed;
   try {
     const { AuthStorage, ModelRegistry } = await import("@earendil-works/pi-coding-agent");
-    const { completeSimple, streamSimple } = await import("@earendil-works/pi-ai");
+    const { completeSimple, streamSimple } = await import("@earendil-works/pi-ai/compat");
     const registry = ModelRegistry.create(AuthStorage.create());
     const model = registry.find(req.provider, req.modelId);
     if (!model) {

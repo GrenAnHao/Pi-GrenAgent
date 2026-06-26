@@ -3,7 +3,7 @@
 // 生成物标题（语音/图片）等共用这一个原语，避免各处重复一份模型解析 + 鉴权 + 清洗逻辑。
 
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import type { Model } from "@earendil-works/pi-ai";
+import type { Model } from "@earendil-works/pi-ai/compat";
 import { getConfig } from "./runtime-config.js";
 
 const DEFAULT_PROMPT =
@@ -44,18 +44,6 @@ export function cleanLine(raw: string, maxChars = 80): string {
   return chars.length > maxChars ? `${chars.slice(0, maxChars - 3).join("")}...` : unquoted;
 }
 
-/**
- * 廉价标题：取首句（到第一个句末标点）或前 maxChars 字，不调模型。
- * 适合「源文本已知且短」的场景（如 TTS 朗读文本、图片 prompt），免费即时。
- */
-export function firstSentenceTitle(input: string, maxChars = 40): string {
-  const t = input.replace(/\s+/g, " ").trim();
-  if (!t) return "";
-  const sentence = (t.match(/^[^。！？.!?\n]*[。！？.!?]?/)?.[0] ?? t).trim() || t;
-  const chars = [...sentence];
-  return chars.length > maxChars ? `${chars.slice(0, maxChars - 1).join("")}…` : sentence;
-}
-
 export interface SummarizeOptions {
   /** 系统提示（覆盖默认的「短标题」提示）。 */
   systemPrompt?: string;
@@ -83,7 +71,7 @@ export async function summarize(
   const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
   if (!auth.ok) return "";
 
-  const { completeSimple } = await import("@earendil-works/pi-ai");
+  const { completeSimple } = await import("@earendil-works/pi-ai/compat");
   const msg = await completeSimple(
     model,
     {

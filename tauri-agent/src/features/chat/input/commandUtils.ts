@@ -1,9 +1,6 @@
 import type { EditorSlashMenuItems, EditorSlashMenuOption } from '@lobehub/ui';
 import type { CommandApiSource, PiCommand } from './commandTypes';
 
-/** Frontend-handled slash commands (override Pi builtin namesakes). */
-export const FRONTEND_COMMAND_NAMES = new Set(['compact', 'new', 'newSession']);
-
 const GROUP_LABELS: Record<CommandApiSource | 'frontend', string> = {
   frontend: '快捷操作',
   builtin: '内置',

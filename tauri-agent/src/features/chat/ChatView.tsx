@@ -220,7 +220,10 @@ export function ChatView() {
         store.useStore.setState({ lastError: undefined });
         await commandLanes.run(workspace, async () => {
           await pi.prompt(workspace, text, undefined, images);
-          await awaitStreamingEnd(store.useStore);
+          await awaitStreamingEnd(
+            store.useStore,
+            /^\//.test(text.trim()) ? { startTimeoutMs: 2000 } : undefined,
+          );
         });
         const cur = store.useStore.getState();
         const retryable = !turnStarted && cur.messages.length === beforeCount;
@@ -231,7 +234,10 @@ export function ChatView() {
         }
         if (cur.lastError) return { ok: false, error: cur.lastError, retryable };
         const last = cur.messages[cur.messages.length - 1];
-        if (!text.startsWith('/') && !cur.isStreaming && last?.kind === 'user') {
+        // 「空轮」仅当一轮确实跑过却无任何输出（agent_start 已把 awaitingResponse 清掉）。
+        // 若 awaitingResponse 仍为 true，说明首响应（agent_start）尚未到达——这是慢启动而非空轮，
+        // 不可误判失败：否则会闪出「发送失败，正在重试」红条并重发 prompt（潜在重复轮次）。
+        if (!text.startsWith('/') && !cur.isStreaming && !cur.awaitingResponse && last?.kind === 'user') {
           return { ok: false, error: EMPTY_TURN_MSG, retryable };
         }
         return { ok: true };

@@ -13,6 +13,16 @@ export function decodeVector(buf: Uint8Array): number[] {
   return Array.from(new Float32Array(aligned.buffer, 0, Math.floor(aligned.byteLength / 4)));
 }
 
+/** Encode an embedding for a nullable SQLite BLOB column: empty / absent -> null. */
+export function encodeEmbeddingBlob(emb: number[] | undefined): Uint8Array | null {
+  return emb && emb.length ? encodeVector(emb) : null;
+}
+
+/** Decode an embedding from a nullable SQLite BLOB column: null / short blob -> undefined. */
+export function decodeEmbeddingBlob(blob: Uint8Array | null | undefined): number[] | undefined {
+  return blob && blob.byteLength >= 4 ? decodeVector(blob) : undefined;
+}
+
 export function cosineSimilarity(a: number[], b: number[]): number {
   let dot = 0;
   let na = 0;

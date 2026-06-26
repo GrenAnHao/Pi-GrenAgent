@@ -6,6 +6,8 @@ import { createHash, randomBytes } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "../_shared/sqlite.js";
+import { decodeEmbeddingBlob as decodeEmbedding, encodeEmbeddingBlob as encodeEmbedding } from "../_shared/vector-store.js";
+import { keywordScore } from "../_shared/keyword-score.js";
 import { type EmbeddingConfig, embedTexts } from "./embedding.js";
 import { dot, scoreMemory, vecNorm } from "./ranking.js";
 
@@ -42,34 +44,6 @@ export interface HistoryRow {
   model: string | null;
   version: number;
   createdAt: number;
-}
-
-function keywordScore(query: string, text: string): number {
-  // Match ASCII words and CJK runs so keyword search works for Chinese too
-  // (plain \W+ split drops CJK characters entirely).
-  const terms = (query.toLowerCase().match(/[\w\u4e00-\u9fff]+/g) ?? []).filter((t) => t.length > 1);
-  if (!terms.length) return 0;
-  const hay = text.toLowerCase();
-  let hits = 0;
-  for (const term of terms) {
-    let idx = hay.indexOf(term);
-    while (idx !== -1) {
-      hits++;
-      idx = hay.indexOf(term, idx + term.length);
-    }
-  }
-  return hits / Math.sqrt(text.length + 1);
-}
-
-function encodeEmbedding(emb: number[] | undefined): Uint8Array | null {
-  if (!emb || !emb.length) return null;
-  return new Uint8Array(new Float32Array(emb).buffer);
-}
-
-function decodeEmbedding(blob: Uint8Array | null | undefined): number[] | undefined {
-  if (!blob || blob.byteLength < 4) return undefined;
-  const aligned = blob.slice();
-  return Array.from(new Float32Array(aligned.buffer, 0, Math.floor(aligned.byteLength / 4)));
 }
 
 interface MemoryRow {

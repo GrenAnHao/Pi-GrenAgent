@@ -57,8 +57,6 @@ export const TIER3_TOPICS = [
   "frontend-design",
 ] as const;
 
-export type Tier3Topic = (typeof TIER3_TOPICS)[number];
-
 function readModule(subdir: string, name: string): string {
   return readFileSync(join(ROOT, subdir, `${name}.md`), "utf8").trim();
 }

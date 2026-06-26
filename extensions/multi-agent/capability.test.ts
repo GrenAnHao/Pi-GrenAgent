@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { PRESETS, resolveProfile, profileToModel, profileToEnv, profileLimits, resolveMcpServers } from "./capability.js";
+import { NET_TOOLS } from "../_shared/tool-groups.js";
 
 describe("resolveProfile", () => {
   it("undefined → default preset", () => {
@@ -79,13 +80,13 @@ describe("profileToEnv", () => {
     expect(profileToEnv({ fs: "workspace" }).SAFETY_READONLY).toBeUndefined();
   });
   it("net=false → deny all real networking tools", () => {
-    expect(profileToEnv({ net: false }).SAFETY_DENY_TOOLS).toBe(
-      "web_search,web_search_multi,fetch_url,fetch_llms,fetch_github_readme,fetch_web_content,github",
-    );
+    // Assert against NET_TOOLS (the single source of truth) so adding a networking
+    // tool there doesn't silently drift this expectation.
+    expect(profileToEnv({ net: false }).SAFETY_DENY_TOOLS).toBe(NET_TOOLS.join(","));
   });
   it("tools.deny merges into deny list", () => {
     expect(profileToEnv({ net: false, tools: { deny: ["bash"] } }).SAFETY_DENY_TOOLS).toBe(
-      "web_search,web_search_multi,fetch_url,fetch_llms,fetch_github_readme,fetch_web_content,github,bash",
+      [...NET_TOOLS, "bash"].join(","),
     );
   });
   it("restricted fs denies bypass writers + code-exec tools", () => {

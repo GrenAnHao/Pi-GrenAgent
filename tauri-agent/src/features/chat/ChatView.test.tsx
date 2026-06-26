@@ -253,6 +253,22 @@ describe('ChatView 发送失败自动重试', () => {
     expect(state.storeState.retrying).toBeUndefined();
   });
 
+  it('首响应较慢（agent_start 未到、仍 awaitingResponse）时不误判空轮、不闪「发送失败」、不重发', async () => {
+    state.workspaceReady = true;
+    state.storeState.messages = [];
+    // 慢启动：prompt 接受即返回，但 agent_start 尚未到达——awaitingResponse 仍为 true、未流式、
+    // 末尾仍是 user 消息。这不是空轮，不应误判失败、闪「发送失败，正在重试」红条或重发 prompt。
+    state.piPrompt.mockResolvedValue(undefined);
+
+    render(<ChatView />);
+    fireEvent.click(screen.getByTestId('chat-input'));
+    await act(async () => {});
+
+    expect(state.piPrompt).toHaveBeenCalledTimes(1);
+    expect(state.storeState.lastError).toBeUndefined();
+    expect(state.storeState.retrying).toBeUndefined();
+  });
+
   it('重试状态存在时显示会话内重试提示', () => {
     state.workspaceReady = true;
     state.storeState.messages = [{ kind: 'user', id: 'u1', text: 'hello' }];

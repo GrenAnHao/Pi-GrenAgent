@@ -7,6 +7,12 @@ import { LazyMarkdown } from './LazyMarkdown';
 const TITLES: Record<string, string> = {
   'knowledge-rag': '已注入知识库上下文',
   'long-term-memory': '已注入长期记忆',
+  'self-evolve-dream-start': 'Dream 已启动',
+  'self-evolve-distill-start': 'Distill 已启动',
+  'self-evolve-dream-done': 'Auto Dream 已完成',
+  'self-evolve-distill-done': 'Auto Distill 已完成',
+  'self-evolve-dream-error': 'Auto Dream 失败',
+  'self-evolve-distill-error': 'Auto Distill 失败',
 };
 
 const styles = createStaticStyles(({ css }) => ({

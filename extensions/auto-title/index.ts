@@ -9,6 +9,7 @@
 // 标题生成本身复用 `_shared/summarize`（进程内摘要原语，生成物标题等也用它）。
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { resolveSummaryModel, summarize } from "../_shared/summarize.js";
+import { extractTextFromContent } from "../_shared/transcript.js";
 
 const ENABLED = (process.env.AUTO_TITLE ?? "1") !== "0";
 
@@ -19,27 +20,11 @@ const TITLE_PROMPT =
 /** 首条 user 消息的纯文本。messages 形如 {role,content} 或 {message:{role,content}}。 */
 function firstUserText(messages: unknown[]): string {
   for (const m of messages) {
-    const obj = (m ?? {}) as {
-      role?: string;
-      content?: unknown;
-      message?: { role?: string; content?: unknown };
-    };
+    const obj = (m ?? {}) as { role?: string; content?: unknown; message?: { role?: string; content?: unknown } };
     const role = obj.role ?? obj.message?.role ?? "";
     if (role !== "user") continue;
-    const content = obj.content ?? obj.message?.content;
-    let text = "";
-    if (typeof content === "string") {
-      text = content;
-    } else if (Array.isArray(content)) {
-      text = content
-        .filter(
-          (p): p is { type: string; text: string } =>
-            !!p && typeof p === "object" && (p as { type?: string }).type === "text",
-        )
-        .map((p) => p.text)
-        .join(" ");
-    }
-    if (text.trim()) return text.trim();
+    const text = extractTextFromContent(obj.content ?? obj.message?.content).trim();
+    if (text) return text;
   }
   return "";
 }

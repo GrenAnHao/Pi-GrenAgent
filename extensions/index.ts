@@ -20,6 +20,7 @@ import goal from "./goal/index.js";
 import imageGen from "./image-gen/index.js";
 import knowledgeRag from "./knowledge-rag/index.js";
 import longTermMemory from "./long-term-memory/index.js";
+import selfEvolve from "./self-evolve/index.js";
 import sessionMemory from "./session-memory/index.js";
 import mcp from "./mcp/index.js";
 import mcpPolicy from "./mcp-policy/index.js";
@@ -58,6 +59,7 @@ export {
   goal,
   knowledgeRag,
   longTermMemory,
+  selfEvolve,
   sessionMemory,
   webFetch,
   webSearch,
@@ -100,6 +102,7 @@ export const allExtensions = [
   goal,
   knowledgeRag,
   longTermMemory,
+  selfEvolve,
   sessionMemory,
   webFetch,
   webSearch,
@@ -143,6 +146,7 @@ export const namedExtensions: Array<{ name: string; factory: (typeof allExtensio
   { name: "goal", factory: goal },
   { name: "knowledge-rag", factory: knowledgeRag },
   { name: "long-term-memory", factory: longTermMemory },
+  { name: "self-evolve", factory: selfEvolve },
   { name: "session-memory", factory: sessionMemory },
   { name: "web-fetch", factory: webFetch },
   { name: "web-search", factory: webSearch },

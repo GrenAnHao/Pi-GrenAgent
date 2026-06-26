@@ -1,7 +1,22 @@
 import '@testing-library/jest-dom/vitest';
-import { afterEach } from 'vitest';
+import { afterEach, vi } from 'vitest';
 import { cleanup } from '@testing-library/react';
+import { App } from 'antd';
 afterEach(cleanup);
+
+// antd v6's App.useApp() only returns functional message/notification/modal when the tree
+// is wrapped in <App>. Component tests render bare, so without this stub calls like
+// message.success(...) throw "is not a function" (surfacing as unhandled rejections from
+// async handlers). Stub the holder globally with no-ops so tests don't need an <App> wrapper.
+const noop = (): void => {};
+const messageApi = { success: noop, error: noop, info: noop, warning: noop, loading: noop, open: noop, destroy: noop };
+const notificationApi = { success: noop, error: noop, info: noop, warning: noop, open: noop, destroy: noop };
+const modalApi = { confirm: noop, info: noop, success: noop, error: noop, warning: noop };
+vi.spyOn(App, 'useApp').mockReturnValue({
+  message: messageApi,
+  notification: notificationApi,
+  modal: modalApi,
+} as never);
 // jsdom 缺少的浏览器 API 垫片（antd / @lobehub/ui 组件测试需要）。
 if (typeof window !== 'undefined') {
   if (!window.matchMedia) {

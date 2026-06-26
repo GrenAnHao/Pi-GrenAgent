@@ -12,14 +12,6 @@ export const MODE_LABELS: Record<AgentMode, string> = {
   plan: 'Plan',
 };
 
-/** 模式说明（选择器副标题 / tooltip 用）。 */
-export const MODE_HINTS: Record<AgentMode, string> = {
-  agent: '完整能力，读写执行皆可',
-  ask: '只读问答，禁写/编辑/命令行/MCP',
-  debug: '调试排查，插桩取证后最小修复',
-  plan: '只读规划，产出步骤再执行',
-};
-
 export function isAgentMode(v: unknown): v is AgentMode {
   return v === 'agent' || v === 'ask' || v === 'debug' || v === 'plan';
 }

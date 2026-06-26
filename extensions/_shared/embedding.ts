@@ -23,8 +23,15 @@ export function resolveEmbedding(
   return resolveCapabilityEndpoint(registry, provider, model, fallbackModel);
 }
 
-export async function embedTexts(texts: string[], config: EmbeddingConfig, signal?: AbortSignal): Promise<number[][]> {
-  if (!config.enabled) throw new Error("embedding disabled: configure an embedding provider in settings");
+const DEFAULT_DISABLED_MESSAGE = "embedding disabled: configure an embedding provider in settings";
+
+export async function embedTexts(
+  texts: string[],
+  config: EmbeddingConfig,
+  signal?: AbortSignal,
+  disabledMessage: string = DEFAULT_DISABLED_MESSAGE,
+): Promise<number[][]> {
+  if (!config.enabled) throw new Error(disabledMessage);
   if (texts.length === 0) return [];
   const res = await capabilityFetch(config.baseUrl, "embeddings", {
     method: "POST",
@@ -33,6 +40,14 @@ export async function embedTexts(texts: string[], config: EmbeddingConfig, signa
     signal,
   });
   if (!res.ok) throw await capabilityError("embedding API", res);
-  const json = (await res.json()) as { data: Array<{ embedding: number[] }> };
-  return json.data.map((d) => d.embedding);
+  const json = (await res.json()) as { data: Array<{ index?: number; embedding: number[] }> };
+  if (json.data.length !== texts.length) {
+    throw new Error(`embedding API 返回数量不符：期望 ${texts.length}，实际 ${json.data.length}`);
+  }
+  // 按 index 排序后再取向量：部分 OpenAI 兼容代理不保证 data 顺序与输入一致，
+  // 乱序会导致向量与原文错位（召回结果错乱且极难排查）。index 缺省时保持原序（稳定排序）。
+  return json.data
+    .slice()
+    .sort((a, b) => (a.index ?? 0) - (b.index ?? 0))
+    .map((d) => d.embedding);
 }

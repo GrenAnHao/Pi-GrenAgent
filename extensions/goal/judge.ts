@@ -1,30 +1,11 @@
+import { flattenTranscript } from "../_shared/transcript.js";
 import { type AskFn, parseJsonLoose } from "./llm.js";
+
+export { flattenTranscript };
 
 export interface Verdict {
   ok: boolean;
   reason: string;
-}
-
-/** Flatten heterogeneous AgentMessage[] to "role: text" lines. */
-function messageToText(m: unknown): string {
-  const obj = (m ?? {}) as { role?: string; content?: unknown };
-  const role = obj.role ?? "";
-  const content = obj.content;
-  let text = "";
-  if (typeof content === "string") {
-    text = content;
-  } else if (Array.isArray(content)) {
-    text = content
-      .filter((p): p is { type: string; text: string } => !!p && typeof p === "object" && (p as { type?: string }).type === "text")
-      .map((p) => p.text)
-      .join(" ");
-  }
-  return text ? `${role}: ${text}` : "";
-}
-
-/** Join messages to a transcript, keeping the most recent `maxChars` characters. */
-export function flattenTranscript(messages: unknown[], maxChars = 12000): string {
-  return messages.map(messageToText).filter(Boolean).join("\n").slice(-maxChars);
 }
 
 const JUDGE_SYSTEM =

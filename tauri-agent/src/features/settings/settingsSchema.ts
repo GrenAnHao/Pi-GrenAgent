@@ -295,6 +295,3 @@ export const GATEWAY_FIELDS: SettingField[] = [
   { key: 'IM_GATEWAY_PORT', label: '网关端口', type: 'number', placeholder: '8765', effect: 'restart' },
   { key: 'IM_GATEWAY_TOKEN', label: '网关 Token（可选）', type: 'password', effect: 'restart' },
 ];
-
-/** 合并列表，供旧调用方复用同一存储。 */
-export const CONNECTION_FIELDS: SettingField[] = [...WECHAT_FIELDS, ...GATEWAY_FIELDS];
