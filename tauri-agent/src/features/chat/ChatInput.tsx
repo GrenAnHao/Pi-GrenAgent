@@ -38,6 +38,10 @@ export function ChatInput({
   const draftKey = activeSessionPath || workspace;
 
   const isStreaming = useStore((s) => s.isStreaming);
+  // 「正在生成」：存在流式中的 assistant 消息。回合文字完成后的收尾窗口 / 工具执行间隙里，
+  // isStreaming（整段 run）仍为 true 但 isGenerating 为 false——据此把"回合刚结束的紧跟消息"
+  // 路由为 followUp(跟进) 而非 steer(引导)，且不去动并发关键的 isStreaming。
+  const isGenerating = useStore((s) => s.messages.some((m) => m.kind === 'assistant' && m.streaming));
   const steering = useStore((s) => s.steering);
   const followUp = useStore((s) => s.followUp);
   const editor = useEditor();
@@ -75,9 +79,15 @@ export function ChatInput({
     if (saveTimer.current) clearTimeout(saveTimer.current);
     if (draftKey) useChatDraftStore.getState().clearDraft(draftKey);
     requestAnimationFrame(() => editor.focus());
-    // 执行中发送 = 引导当前回合（steer）；空闲时 = 新一轮提示。
-    void onSend(text, images.length ? images : undefined, isStreaming ? 'steer' : undefined);
-  }, [editor, readDraft, pastedTexts, attachments, isStreaming, onSend, draftKey]);
+    // 路由：正在生成中发送 = 引导当前回合（steer）；run 进行中但已停笔（收尾/工具间隙）发送 =
+    // 跟进（followUp，回合结束后作为新一轮跑）；完全空闲 = 新一轮提示。这样回合刚答完紧跟的消息
+    // 不会被误当引导，且不触碰并发关键的 isStreaming。
+    void onSend(
+      text,
+      images.length ? images : undefined,
+      isGenerating ? 'steer' : isStreaming ? 'followUp' : undefined,
+    );
+  }, [editor, readDraft, pastedTexts, attachments, isGenerating, isStreaming, onSend, draftKey]);
 
   const stop = useCallback(() => {
     void onAbort();
@@ -140,12 +150,26 @@ export function ChatInput({
       addPastedText: (text) => setPastedTexts((prev) => [...prev, text]),
       removePastedText: (id) => setPastedTexts((prev) => prev.filter((p) => p.id !== id)),
       isStreaming,
+      isGenerating,
       steering,
       followUp,
       send,
       stop,
     }),
-    [editor, empty, handleChange, setValue, attachments, pastedTexts, isStreaming, steering, followUp, send, stop],
+    [
+      editor,
+      empty,
+      handleChange,
+      setValue,
+      attachments,
+      pastedTexts,
+      isStreaming,
+      isGenerating,
+      steering,
+      followUp,
+      send,
+      stop,
+    ],
   );
 
   return (

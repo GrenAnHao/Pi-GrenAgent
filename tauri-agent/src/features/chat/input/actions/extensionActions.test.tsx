@@ -24,6 +24,7 @@ function renderWithCtx(ui: ReactNode) {
     addPastedText: vi.fn(),
     removePastedText: vi.fn(),
     isStreaming: false,
+    isGenerating: false,
     steering: [],
     followUp: [],
     send: vi.fn(),

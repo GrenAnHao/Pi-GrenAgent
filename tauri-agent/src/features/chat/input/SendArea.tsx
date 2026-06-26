@@ -8,9 +8,9 @@ interface SendAreaProps {
 }
 
 export function SendArea({ actions }: SendAreaProps) {
-  const { empty, attachments, pastedTexts, isStreaming, send, stop } = useChatInput();
+  const { empty, attachments, pastedTexts, isStreaming, isGenerating, send, stop } = useChatInput();
   const canSend = !empty || attachments.length > 0 || pastedTexts.length > 0;
-  // 执行中且有内容 → 发送即引导当前回合；执行中且为空 → 停止。
+  // run 进行中且无内容 → 停止。有内容时：正在生成 = 引导(steer)；已停笔（收尾/工具间隙）= 跟进(followUp)。
   const showStop = isStreaming && !canSend;
 
   return (
@@ -23,7 +23,7 @@ export function SendArea({ actions }: SendAreaProps) {
         type="primary"
         shape="circle"
         disabled={!showStop && !canSend}
-        title={showStop ? '停止' : isStreaming ? '引导' : '发送'}
+        title={showStop ? '停止' : isGenerating ? '引导' : isStreaming ? '跟进' : '发送'}
         icon={<Icon icon={showStop ? Square : ArrowUp} size={16} />}
         onClick={() => (showStop ? stop() : send())}
       />

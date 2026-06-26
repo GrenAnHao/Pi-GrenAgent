@@ -35,6 +35,10 @@ export interface ChatInputContextValue {
   addPastedText: (text: PastedText) => void;
   removePastedText: (id: string) => void;
   isStreaming: boolean;
+  /** 是否正在「生成」（存在流式中的 assistant 消息）。区别于 isStreaming（整段 agent run）：
+   * 回合文字完成后的收尾窗口 / 工具执行间隙，isStreaming 仍为 true 但 isGenerating 为 false。
+   * 发送路由据此区分 steer（打断当前生成）与 followUp（排队为跟进），避免回合刚结束的紧跟消息被当引导。 */
+  isGenerating: boolean;
   /** 已排队的引导消息（注入当前回合）；来自 pi 的 queue_update 事件。 */
   steering: string[];
   /** 已排队的跟进消息（当前回合结束后执行）；来自 pi 的 queue_update 事件。 */
