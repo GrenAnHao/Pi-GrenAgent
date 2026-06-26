@@ -214,6 +214,12 @@ export const pi = {
   setMode: (workspace: string, mode: string) => invoke<unknown>('agent_set_mode', { workspace, mode }),
   setApproval: (workspace: string, level: string) =>
     invoke<unknown>('agent_set_approval', { workspace, level }),
+  /** 删任意段：把某条消息（按毫秒 timestamp）移出 LLM 上下文（对模型不可见、不删盘、可恢复）。 */
+  excludeEntry: (workspace: string, timestamp: number) =>
+    invoke<unknown>('agent_exclude_entry', { workspace, timestamp }),
+  /** 恢复被移出上下文的消息。 */
+  restoreEntry: (workspace: string, timestamp: number) =>
+    invoke<unknown>('agent_restore_entry', { workspace, timestamp }),
   compact: (workspace: string) => invoke<unknown>('agent_compact', { workspace }),
   getState: (workspace: string) => invoke<unknown>('agent_get_state', { workspace }),
   getMessages: (workspace: string) => invoke<{ messages: AgentMessage[] }>('agent_get_messages', { workspace }),

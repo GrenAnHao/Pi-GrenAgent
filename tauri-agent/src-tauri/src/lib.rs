@@ -63,6 +63,8 @@ pub fn run() {
             commands::agent_cycle_thinking_level,
             commands::agent_set_mode,
             commands::agent_set_approval,
+            commands::agent_exclude_entry,
+            commands::agent_restore_entry,
             commands::agent_compact,
             commands::agent_set_auto_compaction,
             commands::agent_abort_retry,

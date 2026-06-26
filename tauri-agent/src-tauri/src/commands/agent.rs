@@ -399,6 +399,47 @@ pub async fn agent_set_approval(
     .await
 }
 
+/// 把某条消息移出 LLM 上下文（删任意段）：经 prompt 通道发 `/ctx-exclude <ts>`，由 compaction-policy
+/// 扩展拦截执行（appendEntry 持久 + 更新排除集），不调用 LLM、不进对话。timestamp 为该消息毫秒时间戳。
+#[tauri::command]
+pub async fn agent_exclude_entry(
+    workspace: String,
+    timestamp: i64,
+    mgr: State<'_, Arc<PiManager>>,
+) -> Result<Value, String> {
+    send(
+        &mgr,
+        &workspace,
+        PiOutbound::Prompt {
+            id: None,
+            message: format!("/ctx-exclude {timestamp}"),
+            images: None,
+            streaming_behavior: None,
+        },
+    )
+    .await
+}
+
+/// 恢复被移出上下文的消息：经 prompt 通道发 `/ctx-restore <ts>`，同样由扩展拦截执行、不进对话。
+#[tauri::command]
+pub async fn agent_restore_entry(
+    workspace: String,
+    timestamp: i64,
+    mgr: State<'_, Arc<PiManager>>,
+) -> Result<Value, String> {
+    send(
+        &mgr,
+        &workspace,
+        PiOutbound::Prompt {
+            id: None,
+            message: format!("/ctx-restore {timestamp}"),
+            images: None,
+            streaming_behavior: None,
+        },
+    )
+    .await
+}
+
 #[tauri::command]
 pub async fn agent_compact(
     workspace: String,
