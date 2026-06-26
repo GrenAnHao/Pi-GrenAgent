@@ -32,12 +32,18 @@ import { createStartupPerf } from './lib/startupPerf';
 import { pathsEquivalent } from './lib/pathUtils';
 import { canReuseScratch, readRememberedScratch, rememberScratch } from './lib/startupConversation';
 import {
+  bumpSessionMutationEpoch,
   getAllSessionsInflight,
   getCachedAllSessions,
+  getSessionMutationEpoch,
   invalidateAllSessionsCache,
+  isFreshResponse,
   setAllSessionsInflight,
   setCachedAllSessions,
 } from './lib/sessionCache';
+import { invalidateCachedSession } from './lib/sessionMessageCache';
+import { filterDeletedSessions, mergeAllSessions } from './lib/mergeSessions';
+import { pickAutoSelected } from './lib/sessionSelect';
 
 // 初始工作区由 App 启动时解析（恢复最近会话所属 cwd，否则新建对话）。
 
@@ -45,19 +51,17 @@ import {
 async function refreshSessions(
   workspace: string,
   openResult?: OpenWorkspaceResult,
+  options?: { autoSelect?: boolean },
 ): Promise<void> {
+  const autoSelect = options?.autoSelect ?? true;
   const { setSessions, setActiveSession, setError } = useSessionStore.getState();
   try {
     const sessions = await pi.listSessions(workspace);
     setSessions(sessions);
+    if (!autoSelect) return;
     const active = useSessionStore.getState().activeSessionPath;
-    if (!active) {
-      if (openResult?.sessionFile) {
-        setActiveSession(openResult.sessionFile);
-      } else if (sessions.length > 0) {
-        setActiveSession(sessions[0].path);
-      }
-    }
+    const pick = pickAutoSelected(active, openResult, sessions);
+    if (pick) setActiveSession(pick);
   } catch (err) {
     setError(err instanceof Error ? err.message : String(err));
   }
@@ -66,18 +70,22 @@ async function refreshSessions(
 /** 拉取所有项目的全量会话（供侧边栏按项目分组），带短期缓存。 */
 async function refreshAllSessions(force = false): Promise<void> {
   const { syncAllSessions, setAllSessionsLoading, setError } = useSessionStore.getState();
+  // 记录发起时的代次：响应回来若代次已变（期间发生删除/新建/重命名），丢弃该响应——
+  // 否则"删前/删中"扫到的旧列表会被灌回，表现为删后回弹/需重删。
+  const startedEpoch = getSessionMutationEpoch();
 
   if (!force) {
     const cached = getCachedAllSessions();
     if (cached) {
-      syncAllSessions(cached);
+      if (isFreshResponse(startedEpoch)) syncAllSessions(cached);
       return;
     }
     const inflight = getAllSessionsInflight();
     if (inflight) {
       setAllSessionsLoading(true);
       try {
-        syncAllSessions(await inflight);
+        const s = await inflight;
+        if (isFreshResponse(startedEpoch)) syncAllSessions(s);
       } finally {
         setAllSessionsLoading(false);
       }
@@ -89,6 +97,7 @@ async function refreshAllSessions(force = false): Promise<void> {
   const request = pi
     .listAllSessions()
     .then((sessions) => {
+      if (!isFreshResponse(startedEpoch)) return sessions;
       setCachedAllSessions(sessions);
       syncAllSessions(sessions);
       return sessions;
@@ -473,12 +482,13 @@ const Workspace = memo(function Workspace() {
     const st = useSessionStore.getState();
     // 删除前判定是否为会话区正在显示的会话（pathsEquivalent 兜底分隔符/大小写差异）。
     const wasActive = pathsEquivalent(st.activeSessionPath ?? '', path);
-    // 乐观更新：先把列表项即时移除 + 隐藏（后台删除完成后由 syncAllSessions 自动撤下隐藏），
-    // 避免「await 后端删除 + 重拉」期间列表项残留、删完才突然消失造成的弹闪与「得好一会才删掉」。
+    // 乐观：隐藏集为唯一真相（渲染层 filterDeletedSessions 即时移除）；同时失效两级缓存 + bump epoch
+    // 作废在途重拉。不再裸 setAllSessions(remaining)——那会与重拉互相覆盖造成删后回弹。
     st.hideDeletedSession(path);
     st.removeOptimisticSession(path);
-    const remaining = st.allSessions.filter((s) => !pathsEquivalent(s.path, path));
-    st.setAllSessions(remaining);
+    invalidateCachedSession(path);
+    bumpSessionMutationEpoch();
+    invalidateAllSessionsCache();
     if (wasActive) {
       // 删的是会话区正在显示的会话：先同步清空会话区，避免被删会话消息残留。
       store.reset();
@@ -486,11 +496,16 @@ const Workspace = memo(function Workspace() {
     }
     try {
       await pi.deleteSession(cwd, path);
+      bumpSessionMutationEpoch();
       invalidateAllSessionsCache();
       if (wasActive) {
-        // 优先切到当前项目里仍存在的最近一个会话——删掉刚新建的空会话时应回到项目原有会话，
-        // 而不是停在后端 new_session 产生的又一个空会话上（表现为「界面没变化」）。
-        const nextInProject = remaining
+        // 从"已过滤隐藏集"的可见列表里挑下一个，避免选到刚隐藏的已删项。
+        const cur = useSessionStore.getState();
+        const visible = filterDeletedSessions(
+          mergeAllSessions(cur.allSessions, cur.optimisticSessions),
+          cur.deletedSessionPaths,
+        );
+        const nextInProject = visible
           .filter((s) => s.cwd && pathsEquivalent(s.cwd, cwd))
           .sort((a, b) => (b.timestamp ?? '').localeCompare(a.timestamp ?? ''))[0];
         if (nextInProject) {
@@ -501,7 +516,7 @@ const Workspace = memo(function Workspace() {
             st.setActiveSession(nextInProject.path);
             st.setWorkspaceSessionPath(cwd, nextInProject.path);
           } catch {
-            /* 切换失败：保持空会话区，由下方 refreshSessions 兜底 */
+            /* 切换失败：保持空会话区 */
           }
         } else {
           // 项目内已无其它会话：对齐后端 delete_pi_session 删活跃会话前 new_session 切到的新空会话。
@@ -520,11 +535,10 @@ const Workspace = memo(function Workspace() {
               });
             }
           } catch {
-            /* getState 失败则保持空会话区，由下方 refreshSessions 兜底选择会话 */
+            /* getState 失败保持空会话区 */
           }
         }
       }
-      await refreshSessions(cwd);
       void refreshAllSessions(true);
     } catch (e) {
       // 后端删除失败：撤销乐观隐藏，列表项恢复，并提示错误。
@@ -581,12 +595,30 @@ const Workspace = memo(function Workspace() {
   const handleDeleteConversation = useCallback(
     (cwd: string) => {
       const st = useSessionStore.getState();
+      // 失效该 cwd 下所有会话的消息缓存（删除前先收集 path）。
+      const pathsUnderCwd = st.allSessions
+        .filter((s) => s.cwd && pathsEquivalent(s.cwd, cwd))
+        .map((s) => s.path);
       st.hideDeletedConversation(cwd);
       st.removeOptimisticByCwd(cwd);
-      st.setAllSessions(st.allSessions.filter((s) => !pathsEquivalent(s.cwd ?? '', cwd)));
+      for (const p of pathsUnderCwd) invalidateCachedSession(p);
+      bumpSessionMutationEpoch();
+      invalidateAllSessionsCache();
       if (pathsEquivalent(st.activeWorkspace, cwd)) {
-        const next = st.allSessions
-          .filter((s) => s.cwd && !pathsEquivalent(s.cwd, cwd))
+        // 从"已过滤隐藏集 + 排除已删对话 cwd"的可见列表里挑下一个，
+        // 不再选到另一个已隐藏未清理的对话（消除切到已删 cwd 的闪/错）。
+        const cur = useSessionStore.getState();
+        const visible = filterDeletedSessions(
+          mergeAllSessions(cur.allSessions, cur.optimisticSessions),
+          cur.deletedSessionPaths,
+        );
+        const next = visible
+          .filter(
+            (s) =>
+              s.cwd &&
+              !pathsEquivalent(s.cwd, cwd) &&
+              !cur.deletedConversationCwds.some((d) => pathsEquivalent(d, s.cwd ?? '')),
+          )
           .sort((a, b) => (b.timestamp ?? '').localeCompare(a.timestamp ?? ''))[0];
         st.setActiveSession(next?.path ?? '');
         if (next?.cwd) {
@@ -598,6 +630,7 @@ const Workspace = memo(function Workspace() {
       void (async () => {
         try {
           await pi.deleteConversation(cwd);
+          bumpSessionMutationEpoch();
           invalidateAllSessionsCache();
           await refreshAllSessions(true);
         } catch (e) {
