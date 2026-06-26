@@ -57,7 +57,7 @@ export function setCachedSession(sessionPath: string, messages: ChatMessage[], s
   }
 }
 
-/** 测试用：清空缓存，避免跨用例污染。 */
-export function clearSessionMessageCacheForTest(): void {
-  cache.clear();
+/** 删除某会话后清掉其消息缓存，避免 showCachedSession 仍命中已删会话内容（缓存卡死）。 */
+export function invalidateCachedSession(sessionPath: string): void {
+  cache.delete(sessionPath);
 }
