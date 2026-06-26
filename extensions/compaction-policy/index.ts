@@ -1,7 +1,12 @@
-// compaction-policy: ephemeral context prune via the `context` hook + context
-// pressure indicator. Pure extension; default prune OFF, pressure ON.
+// compaction-policy: 上下文控制集合——
+//   - ephemeral prune（`context` 钩子裁旧工具输出，默认关）
+//   - context 压力分级指示（默认开）
+//   - 用户驱动的「删任意段」（按 timestamp 把任意消息移出 LLM 上下文，可恢复；不删盘）
+//   - 压缩接管（session_before_compact 预览/取消，默认关，fail-open）
+// 纯扩展。删段经 /ctx-exclude /ctx-restore slash 命令驱动（不进 LLM 对话），会话内 appendEntry 持久 + 分支安全。
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { getConfig } from "../_shared/runtime-config.js";
+import { buildExclusionSet, type ExclusionOp, filterExcludedByTs } from "./exclusion.js";
 import { classify } from "./pressure.js";
 import { pruneMessages } from "./prune.js";
 
@@ -9,31 +14,96 @@ const pruneEnabled = () => (getConfig("COMPACTION_POLICY_PRUNE") ?? "0") !== "0"
 const keepTurns = () => Number(getConfig("COMPACTION_POLICY_KEEP_TURNS") ?? "6") || 6;
 const minBody = () => Number(getConfig("COMPACTION_POLICY_MIN_BODY") ?? "1000") || 1000;
 const pressureEnabled = () => (getConfig("COMPACTION_POLICY_PRESSURE") ?? "1") !== "0";
+const compactPreview = () => (getConfig("COMPACTION_PREVIEW") ?? "0") !== "0";
 
 export default function (pi: ExtensionAPI) {
+  // 用户驱动的上下文排除集（按消息 timestamp）。来源：会话内 context_exclusion 自定义条目（分支安全），
+  // session_start 回放重建。AgentMessage 无稳定 id 但有 timestamp，故按 timestamp 关联。
+  let excluded = new Set<number>();
+
+  pi.on("session_start", async (_event, ctx) => {
+    const entries = ctx.sessionManager.getEntries() as Array<{ type: string; customType?: string; data?: unknown }>;
+    const ops = entries
+      .filter((e) => e.type === "custom" && e.customType === "context_exclusion")
+      .map((e) => e.data as ExclusionOp);
+    excluded = buildExclusionSet(ops);
+  });
+
+  // context 钩子：先按排除集过滤（删任意段），再 prune（裁旧工具输出）。两者独立、可叠加。
   pi.on("context", async (event) => {
-    if (!pruneEnabled()) return undefined;
-    const res = pruneMessages(event.messages, { keepRecentTurns: keepTurns(), minBodyChars: minBody() });
-    if (res.prunedCount === 0) return undefined;
+    let msgs = event.messages;
+    if (excluded.size > 0) {
+      msgs = filterExcludedByTs(msgs as Array<{ timestamp?: number }>, excluded) as typeof msgs;
+    }
+    if (!pruneEnabled()) {
+      return msgs === event.messages ? undefined : { messages: msgs };
+    }
+    const res = pruneMessages(msgs, { keepRecentTurns: keepTurns(), minBodyChars: minBody() });
+    if (res.prunedCount === 0 && msgs === event.messages) return undefined;
     return { messages: res.messages };
+  });
+
+  // 删任意段：桌面经 /ctx-exclude <ts> / /ctx-restore <ts> 驱动（slash 命令被扩展拦截执行，不进 LLM 对话）。
+  const applyOp = (op: ExclusionOp) => {
+    if (op.op === "add") excluded.add(op.ts);
+    else excluded.delete(op.ts);
+    pi.appendEntry("context_exclusion", op);
+  };
+  pi.registerCommand("ctx-exclude", {
+    description: "把某条消息移出上下文（参数：消息 timestamp）",
+    handler: async (args, ctx) => {
+      const ts = Number(args.trim());
+      if (!Number.isFinite(ts)) {
+        ctx.ui.notify("用法：/ctx-exclude <timestamp>", "warning");
+        return;
+      }
+      applyOp({ op: "add", ts });
+      ctx.ui.notify("已移出上下文（对模型不可见）", "info");
+    },
+  });
+  pi.registerCommand("ctx-restore", {
+    description: "恢复被移出上下文的消息（参数：消息 timestamp）",
+    handler: async (args, ctx) => {
+      const ts = Number(args.trim());
+      if (!Number.isFinite(ts)) {
+        ctx.ui.notify("用法：/ctx-restore <timestamp>", "warning");
+        return;
+      }
+      applyOp({ op: "remove", ts });
+      ctx.ui.notify("已恢复到上下文", "info");
+    },
+  });
+
+  // 压缩接管：默认关；开启后压缩前用 ctx.ui 预览/取消。fail-open（UI 失败/超时放行默认压缩）。
+  pi.on("session_before_compact", async (event, ctx) => {
+    if (!compactPreview() || !ctx.hasUI) return undefined;
+    try {
+      const n =
+        (event as { preparation?: { messagesToSummarize?: unknown[] } }).preparation?.messagesToSummarize?.length ?? 0;
+      const ok = await ctx.ui.confirm("压缩上下文", `将摘要约 ${n} 条消息。继续？`);
+      if (!ok) return { cancel: true };
+      return undefined;
+    } catch {
+      return undefined;
+    }
   });
 
   const updatePressure = (ctx: ExtensionContext) => {
     if (!pressureEnabled()) return;
     ctx.ui.setStatus("ctx", classify(ctx.getContextUsage()?.percent ?? null).label);
   };
-
   pi.on("turn_end", async (_event, ctx) => updatePressure(ctx));
   pi.on("agent_end", async (_event, ctx) => updatePressure(ctx));
 
   pi.registerCommand("compaction", {
-    description: "查看上下文压力与 prune 状态",
+    description: "查看上下文压力与 prune / 排除状态",
     handler: async (_args, ctx) => {
       const usage = ctx.getContextUsage();
       const { level, label } = classify(usage?.percent ?? null);
       ctx.ui.notify(
         `上下文：${usage?.tokens ?? "?"}/${usage?.contextWindow ?? "?"} tokens（${label}，级别 ${level}）\n` +
-          `prune: ${pruneEnabled() ? "开" : "关"}（保护窗口 ${keepTurns()} 轮，最小裁剪 ${minBody()} 字符）`,
+          `prune: ${pruneEnabled() ? "开" : "关"}（保护窗口 ${keepTurns()} 轮，最小裁剪 ${minBody()} 字符）\n` +
+          `已移出上下文：${excluded.size} 条`,
         "info",
       );
     },
