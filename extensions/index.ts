@@ -13,6 +13,7 @@ import astTools from "./ast-tools/index.js";
 import github from "./github/index.js";
 import batchTools from "./batch-tools/index.js";
 import diagnostics from "./diagnostics/index.js";
+import afterToolFeedback from "./after-tool-feedback/index.js";
 import imGateway from "./im-gateway/index.js";
 import imPlatforms from "./im-platforms/index.js";
 import goal from "./goal/index.js";
@@ -78,6 +79,7 @@ export {
   tts,
   imGateway,
   imPlatforms,
+  afterToolFeedback,
 };
 
 // Order roughly by general usefulness; safety first so guardrails intercept earliest.
@@ -119,6 +121,7 @@ export const allExtensions = [
   tts,
   imGateway,
   imPlatforms,
+  afterToolFeedback,
 ];
 
 // 名→工厂映射（与 allExtensions 同序）：供 sidecar 按 EXTENSIONS_PROFILE 过滤加载（真对话模式裁重扩展）。
@@ -161,4 +164,5 @@ export const namedExtensions: Array<{ name: string; factory: (typeof allExtensio
   { name: "tts", factory: tts },
   { name: "im-gateway", factory: imGateway },
   { name: "im-platforms", factory: imPlatforms },
+  { name: "after-tool-feedback", factory: afterToolFeedback },
 ];
