@@ -33,6 +33,13 @@ export function isBackgroundSpawn(result: unknown): boolean {
   return d?.status === 'running' && typeof d?.transcript !== 'string';
 }
 
+/** registry 状态字符串 → 会话视图三态（cancelled 归入 error）。 */
+export function mapSubAgentStatus(status: string): 'running' | 'done' | 'error' {
+  if (status === 'running') return 'running';
+  if (status === 'error' || status === 'cancelled') return 'error';
+  return 'done';
+}
+
 function transcriptOf(result: unknown): string {
   if (!result || typeof result !== 'object') return '';
   const details = (result as { details?: unknown }).details;

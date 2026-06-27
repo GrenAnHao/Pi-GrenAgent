@@ -7,7 +7,7 @@ import { pi, type SubAgentItem } from '../../lib/pi';
 import { useOptionalAgentStoreContext } from '../../stores/AgentStoreContext';
 import { useDockStore } from '../../stores/dockStore';
 import { useLayoutStore } from '../../stores/layoutStore';
-import { subAgentId } from '../panels/subagentUtils';
+import { mapSubAgentStatus, subAgentId } from '../panels/subagentUtils';
 import { SubAgentCard } from './SubAgentCard';
 
 const POLL_MS = 2500;
@@ -48,13 +48,6 @@ const styles = createStaticStyles(({ css }) => ({
     text-align: center;
   `,
 }));
-
-/** registry 状态 → SubAgentConversation 的三态。 */
-function mapStatus(status: string): 'running' | 'done' | 'error' {
-  if (status === 'running') return 'running';
-  if (status === 'error' || status === 'cancelled') return 'error';
-  return 'done';
-}
 
 /** 列表签名：仅在子代理集合 / 状态 / 活跃时间变化时才触发渲染。 */
 function signature(items: SubAgentItem[]): string {
@@ -120,7 +113,7 @@ export function SubAgentMenuButton() {
         agentId: item.id,
         task: item.task,
         output: item.output ?? '',
-        status: mapStatus(item.status),
+        status: mapSubAgentStatus(item.status),
       });
     },
     [store],
