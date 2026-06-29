@@ -1,4 +1,4 @@
-import { messagesFromTranscript } from '../../stores/agentReducer';
+import { messagesFromTranscript, type ChatMessage } from '../../stores/agentReducer';
 
 /** 从 spawn_agent 工具入参里取一个人类可读的任务标签（主对话内联块与右侧面板 tab 共用）。 */
 export function taskLabel(args: unknown): string {
@@ -13,6 +13,32 @@ export function taskLabel(args: unknown): string {
   if (a.chain?.length) return `${a.chain.length} 步链式`;
   if (a.tasks?.length) return `${a.tasks.length} 个并行任务`;
   return '子代理任务';
+}
+
+/** 从子代理任务文本提取简短角色：识别「角色 ... **X**」，回退首个非空行剥 markdown 截断。 */
+export function subAgentRoleLabel(task: string): string {
+  const t = (task ?? '').trim();
+  if (!t) return '子代理任务';
+  const m = t.match(/角色[^\n]*?\*\*(.+?)\*\*/);
+  if (m && m[1].trim()) return m[1].trim();
+  const firstLine = t.split(/\r?\n/).map((l) => l.trim()).find((l) => l.length > 0) ?? t;
+  const plain = firstLine.replace(/^#{1,6}\s*/, '').replace(/[*_`>]/g, '').trim();
+  return plain.length > 40 ? `${plain.slice(0, 40)}…` : plain;
+}
+
+/** 从已解析消息列表取「第 N 步 + 当前动作」（step 计 assistant+tool）。 */
+export function latestStepFromMessages(msgs: ChatMessage[]): { step: number; action: string } | null {
+  const steps = msgs.filter((m) => m.kind === 'assistant' || m.kind === 'tool');
+  if (steps.length === 0) return null;
+  const last = steps[steps.length - 1];
+  const action = last.kind === 'tool' ? `调用 ${last.toolName}` : '生成回复中…';
+  return { step: steps.length, action };
+}
+
+/** 从运行中子代理增量 transcript 取最新一步摘要，供折叠态第二行实时显示。 */
+export function latestSubAgentStep(transcript: string): { step: number; action: string } | null {
+  if (!transcript) return null;
+  return latestStepFromMessages(messagesFromTranscript(transcript));
 }
 
 function detailsOf(result: unknown): Record<string, unknown> | null {

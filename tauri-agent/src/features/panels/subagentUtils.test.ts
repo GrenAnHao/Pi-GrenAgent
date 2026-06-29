@@ -2,9 +2,13 @@ import { describe, expect, it } from 'vitest';
 import {
   expandSubAgents,
   subAgentMode,
+  subAgentRoleLabel,
+  latestStepFromMessages,
+  latestSubAgentStep,
   subAgentUnitView,
   taskLabel,
 } from './subagentUtils';
+import type { ChatMessage } from '../../stores/agentReducer';
 
 function textOf(result: unknown): string {
   const content = (result as { content?: Array<{ text?: string }> } | undefined)?.content;
@@ -97,5 +101,46 @@ describe('subAgentUnitView', () => {
     const view = subAgentUnitView({ tasks: ['a', 'b'] }, {}, 'running', 0);
     expect(view.status).toBe('running');
     expect(view.result).toBeUndefined();
+  });
+});
+
+describe('subAgentRoleLabel', () => {
+  it('extracts the bold role after 角色', () => {
+    expect(subAgentRoleLabel('## 角色 你是 **Rust/系统架构倡导者**. 任务...')).toBe('Rust/系统架构倡导者');
+  });
+  it('falls back to first non-empty line stripped of markdown', () => {
+    expect(subAgentRoleLabel('# 审查这段并发代码的安全性\n\n更多...')).toBe('审查这段并发代码的安全性');
+  });
+  it('truncates long fallback with ellipsis', () => {
+    expect(subAgentRoleLabel('一'.repeat(50))).toBe(`${'一'.repeat(40)}…`);
+  });
+  it('empty → 子代理任务', () => {
+    expect(subAgentRoleLabel('')).toBe('子代理任务');
+  });
+});
+
+describe('latestStepFromMessages', () => {
+  it('empty → null', () => {
+    expect(latestStepFromMessages([])).toBeNull();
+  });
+  it('latest tool → 调用 toolName，step 计 assistant+tool', () => {
+    const msgs = [
+      { kind: 'assistant', id: 'a1', text: 'hi', thinking: '', streaming: false } as ChatMessage,
+      { kind: 'tool', id: 't1', toolCallId: 'c1', toolName: 'read_file', args: {}, result: {}, status: 'done' } as ChatMessage,
+    ];
+    expect(latestStepFromMessages(msgs)).toEqual({ step: 2, action: '调用 read_file' });
+  });
+  it('latest assistant → 生成回复中…', () => {
+    const msgs = [
+      { kind: 'tool', id: 't1', toolCallId: 'c1', toolName: 'grep', args: {}, result: {}, status: 'done' } as ChatMessage,
+      { kind: 'assistant', id: 'a1', text: '结论...', thinking: '', streaming: false } as ChatMessage,
+    ];
+    expect(latestStepFromMessages(msgs)).toEqual({ step: 2, action: '生成回复中…' });
+  });
+});
+
+describe('latestSubAgentStep', () => {
+  it('empty transcript → null', () => {
+    expect(latestSubAgentStep('')).toBeNull();
   });
 });
