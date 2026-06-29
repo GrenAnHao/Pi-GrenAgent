@@ -73,4 +73,28 @@ describe('parseMessageTags', () => {
     expect(parseMessageTags('user@host.com').every((s) => s.type === 'text')).toBe(true);
     expect(parseMessageTags('see /src/foo.ts')[0].type).toBe('text');
   });
+
+  it('把 <url> autolink 切成 link 段并隐藏尖括号', () => {
+    expect(parseMessageTags('<https://api.mistyrain.cloud>')).toEqual([
+      { type: 'link', url: 'https://api.mistyrain.cloud' },
+    ]);
+  });
+
+  it('<url> 两侧文本保留、尖括号隐藏', () => {
+    const segs = parseMessageTags('看 <https://a.com> 这个');
+    expect(segs).toEqual([
+      { type: 'text', text: '看 ' },
+      { type: 'link', url: 'https://a.com' },
+      { type: 'text', text: ' 这个' },
+    ]);
+  });
+
+  it('<url> 紧跟文本（无空白）也能识别', () => {
+    const segs = parseMessageTags('见<https://a.com>。');
+    expect(segs).toEqual([
+      { type: 'text', text: '见' },
+      { type: 'link', url: 'https://a.com' },
+      { type: 'text', text: '。' },
+    ]);
+  });
 });

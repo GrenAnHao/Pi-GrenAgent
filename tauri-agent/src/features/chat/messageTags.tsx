@@ -14,28 +14,37 @@ export type MessageSegment =
 // compact skill chip so the bubble stays consistent before and after a reload
 // (no more "wall of SKILL.md text" when switching back to a conversation).
 const SKILL_BLOCK_RE = /<skill\s+name="([^"]+)"[^>]*>[\s\S]*?<\/skill>/g;
-// URL（http/https）/ `/skill:name` / `@path`，均限「行首或空白后」。
-const INLINE_RE = /(^|\s)(https?:\/\/\S+|\/skill:(\S+)|@(\S+))/g;
+// 两条分支：
+// 1. `<url>` markdown autolink —— 尖括号自成边界（可紧跟文本），m[1] 为链接，渲染时隐藏两侧尖括号。
+// 2. `(^|\s)` 边界后的裸 URL / `/skill:name` / `@path`：m[2]=边界、m[3]=token、m[4]=skill、m[5]=file。
+const INLINE_RE = /<(https?:\/\/[^>\s]+)>|(^|\s)(https?:\/\/\S+|\/skill:(\S+)|@(\S+))/g;
 
 function bareSkillName(name: string): string {
   const n = name.trim();
   return n.startsWith('skill:') ? n.slice(6) : n;
 }
 
-/** Inline pass over a plain run: split out `/skill:name` and `@path` tokens. */
+/** Inline pass over a plain run: split out `<url>` autolinks, bare URLs, `/skill:name` and `@path` tokens. */
 function parseInline(text: string, segments: MessageSegment[]): void {
   let last = 0;
   let m: RegExpExecArray | null;
   INLINE_RE.lastIndex = 0;
   while ((m = INLINE_RE.exec(text)) !== null) {
-    const tokenStart = m.index + m[1].length;
+    if (m[1] !== undefined) {
+      // `<url>` autolink：尖括号从 m.index 起，不属于任何段（隐藏）。
+      if (m.index > last) segments.push({ type: 'text', text: text.slice(last, m.index) });
+      segments.push({ type: 'link', url: m[1] });
+      last = INLINE_RE.lastIndex;
+      continue;
+    }
+    const tokenStart = m.index + m[2].length;
     if (tokenStart > last) segments.push({ type: 'text', text: text.slice(last, tokenStart) });
-    if (m[3] !== undefined) {
-      segments.push({ type: 'skill', name: bareSkillName(m[3]) });
-    } else if (m[4] !== undefined) {
-      segments.push({ type: 'file', path: m[4] });
+    if (m[4] !== undefined) {
+      segments.push({ type: 'skill', name: bareSkillName(m[4]) });
+    } else if (m[5] !== undefined) {
+      segments.push({ type: 'file', path: m[5] });
     } else {
-      segments.push({ type: 'link', url: m[2] });
+      segments.push({ type: 'link', url: m[3] });
     }
     last = INLINE_RE.lastIndex;
   }
