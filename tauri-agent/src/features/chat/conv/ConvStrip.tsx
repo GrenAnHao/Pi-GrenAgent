@@ -8,11 +8,10 @@ import { StatusGlyph, type ConvStatus } from './StatusGlyph';
 const styles = createStaticStyles(({ css }) => ({
   strip: css`
     display: flex;
-    align-items: center;
-    gap: 8px;
-    height: 30px;
+    flex-direction: column;
+    gap: 3px;
     margin-block: 2px;
-    padding: 0 10px;
+    padding: 6px 10px;
     border: 1px solid ${cssVar.colorBorderSecondary};
     border-radius: ${cssVar.borderRadius};
     background: ${cssVar.colorFillQuaternary};
@@ -24,40 +23,51 @@ const styles = createStaticStyles(({ css }) => ({
       border-color: ${cssVar.colorBorder};
     }
   `,
+  l1: css`
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  `,
   title: css`
     flex: none;
     font-weight: 600;
     color: ${cssVar.colorText};
   `,
-  num: css`
+  role: css`
     flex: none;
-    font-family: ${cssVar.fontFamilyCode};
-    font-size: 11.5px;
-    color: ${cssVar.colorTextTertiary};
-  `,
-  chip: css`
-    overflow: hidden;
     min-width: 0;
-    padding: 1px 7px;
-    border: 1px solid ${cssVar.colorBorderSecondary};
-    border-radius: 4px;
-    background: ${cssVar.colorFillTertiary};
-    font-family: ${cssVar.fontFamilyCode};
-    font-size: 11px;
-    color: ${cssVar.colorTextSecondary};
+    overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    font-weight: 600;
+    color: ${cssVar.colorText};
+  `,
+  spacer: css`
+    flex: 1;
+    min-width: 0;
   `,
   right: css`
     display: flex;
     flex: none;
     align-items: center;
     gap: 8px;
-    margin-inline-start: auto;
   `,
-  meta: css`
+  model: css`
+    font-family: ${cssVar.fontFamilyCode};
     font-size: 11px;
+    color: ${cssVar.colorTextSecondary};
+    padding: 1px 6px;
+    border: 1px solid ${cssVar.colorBorderSecondary};
+    border-radius: 4px;
+    background: ${cssVar.colorFillTertiary};
+    white-space: nowrap;
+  `,
+  l2: css`
+    padding-inline-start: 22px;
+    overflow: hidden;
+    font-size: 12px;
     color: ${cssVar.colorTextTertiary};
+    text-overflow: ellipsis;
     white-space: nowrap;
   `,
 }));
@@ -66,24 +76,30 @@ interface ConvStripProps {
   status: ConvStatus;
   icon: LucideIcon;
   title: string;
-  num?: string;
-  chip?: ReactNode;
-  meta?: ReactNode;
-  /** 右侧操作（停止 / 打开右坞等）；点击不冒泡到整条 toggle。 */
+  /** 角色 / 任务短标签（第一行主文案，非 code）。 */
+  role?: ReactNode;
+  /** 第二行（实时步骤 / 终态摘要）。 */
+  line2?: ReactNode;
+  /** 模型 chip（第一行最右）。 */
+  model?: ReactNode;
+  /** 运行可停止：传入后左侧状态图标 hover 变停止键。 */
+  onStop?: (e: MouseEvent) => void;
+  /** 其它右侧操作（置于 model 左侧）。 */
   actions?: ReactNode;
   open?: boolean;
   onToggle?: () => void;
   'data-testid'?: string;
 }
 
-/** L3 横条：整条 surface（底 + hairline + 圆角）单行，给侧重组件（子代理）以存在感。 */
+/** L3 横条：双行 surface（角色前置 + 实时/摘要第二行 + 模型靠右）。 */
 export const ConvStrip = memo(function ConvStrip({
   status,
   icon,
   title,
-  num,
-  chip,
-  meta,
+  role,
+  line2,
+  model,
+  onStop,
   actions,
   open = false,
   onToggle,
@@ -91,17 +107,25 @@ export const ConvStrip = memo(function ConvStrip({
 }: ConvStripProps) {
   const stop = (e: MouseEvent) => e.stopPropagation();
   return (
-    <div className={styles.strip} data-testid={testId} onClick={onToggle}>
-      <StatusGlyph status={status} />
-      <Icon icon={icon} size={14} style={{ color: cssVar.colorInfo, flex: 'none' }} />
-      <span className={styles.title}>{title}</span>
-      {num ? <span className={styles.num}>{num}</span> : null}
-      {chip != null ? <span className={styles.chip}>{chip}</span> : null}
-      <div className={styles.right} onClick={stop}>
-        {meta != null ? <span className={styles.meta}>{meta}</span> : null}
-        {actions}
-        {onToggle ? <Disclosure open={open} /> : null}
+    <div className={`conv-strip ${styles.strip}`} data-testid={testId} onClick={onToggle}>
+      <div className={styles.l1}>
+        <StatusGlyph status={status} onStop={onStop} />
+        <Icon icon={icon} size={14} style={{ color: cssVar.colorInfo, flex: 'none' }} />
+        <span className={styles.title}>{title}</span>
+        {role != null ? (
+          <>
+            <span style={{ flex: 'none', color: cssVar.colorTextQuaternary }}>·</span>
+            <span className={styles.role}>{role}</span>
+          </>
+        ) : null}
+        <span className={styles.spacer} />
+        <div className={styles.right} onClick={stop}>
+          {actions}
+          {model != null ? <span className={styles.model}>{model}</span> : null}
+          {onToggle ? <Disclosure open={open} /> : null}
+        </div>
       </div>
+      {line2 != null ? <div className={styles.l2}>{line2}</div> : null}
     </div>
   );
 });
