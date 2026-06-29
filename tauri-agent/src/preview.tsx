@@ -133,9 +133,9 @@ function Gallery() {
           <ConvRow status="error" icon={Terminal} name="bash" args="npm test" meta="出错" />
         </Item>
         <Item label="ConvStrip（L3 横条：子代理 done / running / error）">
-          <ConvStrip status="done" icon={Bot} title="子代理" num="#1" chip="审查刚才的改动" meta="完成 · 6 步" onToggle={() => {}} />
-          <ConvStrip status="running" icon={Bot} title="子代理" num="#2" chip="跑全量测试" meta="运行中…" onToggle={() => {}} />
-          <ConvStrip status="error" icon={Bot} title="子代理" num="#3" chip="构建 sidecar" meta="出错 · 3 步" onToggle={() => {}} />
+          <ConvStrip status="done" icon={Bot} title="子代理 #1" role="性能工程师" model="deepseek-v4-flash" line2="已完成 · 6 步 · 12.3k · 审查刚才的改动" onToggle={() => {}} />
+          <ConvStrip status="running" icon={Bot} title="子代理 #2" role="测试工程师" model="gpt-5.3-codex" line2="第 3 步 · 调用 read_file" onStop={() => {}} onToggle={() => {}} />
+          <ConvStrip status="error" icon={Bot} title="子代理 #3" role="构建工程师" model="claude-4.6-sonnet" line2="出错 · 3 步 · 构建 sidecar 失败" onToggle={() => {}} />
         </Item>
         <Item label="MutedLine（L1 低调行：深度思考 / 注入计数）">
           <MutedLine icon={Boxes} text="已深度思考 · 13 秒" onToggle={() => {}} />
