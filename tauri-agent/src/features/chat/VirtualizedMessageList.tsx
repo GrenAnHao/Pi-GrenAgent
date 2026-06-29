@@ -37,7 +37,13 @@ export function VirtualizedMessageList({
   'data-testid': testId,
 }: VirtualizedMessageListProps) {
   const ref = useRef<VListHandle>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const atBottomRef = useRef(true);
+  const countRef = useRef(0);
+  const resizingRef = useRef(false);
+  // 不贴底时 resize 的稳定锚点：顶部可见条目索引 + 该条目已滚过视口顶的像素。
+  const anchorIndexRef = useRef(0);
+  const anchorWithinRef = useRef(0);
 
   const itemStyle: CSSProperties = { paddingInline, paddingBlock: 4 };
   const children: ReactNode[] = display.map((msg) => (
@@ -53,23 +59,71 @@ export function VirtualizedMessageList({
     );
   }
   const count = children.length;
+  countRef.current = count;
 
-  // 内容变化（新消息 / 流式增长）后，若用户停留在底部则滚到最后一条。
-  useEffect(() => {
-    if (atBottomRef.current && ref.current && count > 0) {
-      ref.current.scrollToIndex(count - 1, { align: 'end' });
+  // 贴底：仅在用户停留在底部时滚到最后一条（用 ref 读最新 count，供 resize 回调复用）。
+  const stickToBottom = () => {
+    if (atBottomRef.current && ref.current && countRef.current > 0) {
+      ref.current.scrollToIndex(countRef.current - 1, { align: 'end' });
     }
-  });
+  };
+
+  // 内容变化（新消息 / 流式增长）后贴底。
+  useEffect(stickToBottom);
+
+  // 视口尺寸变化（窗口压缩 / 面板折叠 / 文字重排）时保持位置。
+  // 难点：virtua 在 resize 时按自身锚点逐帧重排，中部阅读位会抖；且重排触发的 onScroll 会污染贴底判断。
+  // 方案：resize 期间用 resizingRef 冻结 atBottomRef/锚点（onScroll 跳过），按冻结前意图持续钉回——
+  //   贴底：交给收尾一次性 scrollToIndex(end)（virtua 自身贴底重排是平滑的，逐帧滚反而打架）；
+  //   不贴底：逐帧 scrollTo(锚点条目当前 offset + 偏移)，盖掉 virtua 的抖动，把阅读位钉死。
+  //   收尾再钉一次确保最终位置准确，并延一帧解冻以避开程序化滚动自身触发的 onScroll。
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    let settleTimer: ReturnType<typeof setTimeout> | undefined;
+    const restore = () => {
+      const h = ref.current;
+      if (!h) return;
+      if (atBottomRef.current) {
+        if (countRef.current > 0) h.scrollToIndex(countRef.current - 1, { align: 'end' });
+      } else {
+        // 用 scrollToIndex 而非 scrollTo：它保证锚点条目落入渲染范围，rapid resize 下即使条目高度暂时
+        // 还是旧值也不会因 offset 越界而瞬间空白；align:'start'+offset 落点与原 scrollTo 等价。
+        h.scrollToIndex(anchorIndexRef.current, { align: 'start', offset: anchorWithinRef.current });
+      }
+    };
+    const ro = new ResizeObserver(() => {
+      resizingRef.current = true;
+      if (!atBottomRef.current) restore();
+      clearTimeout(settleTimer);
+      settleTimer = setTimeout(() => {
+        restore();
+        requestAnimationFrame(() => {
+          resizingRef.current = false;
+        });
+      }, 100);
+    });
+    ro.observe(el);
+    return () => {
+      clearTimeout(settleTimer);
+      ro.disconnect();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
-    <div data-testid={testId} style={fillStyle(fill)}>
+    <div ref={containerRef} data-testid={testId} style={fillStyle(fill)}>
       <VList
         ref={ref}
         style={{ height: '100%', flex: 1, minHeight: 0 }}
         onScroll={() => {
+          if (resizingRef.current) return;
           const h = ref.current;
           if (!h) return;
           atBottomRef.current = h.scrollOffset + h.viewportSize >= h.scrollSize - BOTTOM_THRESHOLD;
+          // 记录当前顶部可见条目作为锚点，供 resize 期间钉回阅读位置。
+          anchorIndexRef.current = h.findItemIndex(h.scrollOffset);
+          anchorWithinRef.current = h.scrollOffset - h.getItemOffset(anchorIndexRef.current);
         }}
       >
         {children}
