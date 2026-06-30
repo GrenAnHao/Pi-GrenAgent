@@ -15,7 +15,7 @@ output/
 /archive/
 
 # Tool caches / indexes / configs
-/.codegraph/
+/.codebase-memory/
 /.claude/
 /.codex/
 /.superpowers/

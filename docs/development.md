@@ -27,7 +27,7 @@ bun install
 | `bun run tauri dev` | 启动桌面端（Tauri + Rust，内部触发 `bun run build`） |
 | `bun run build` | 前端构建（`tsc && vite build`） |
 | `bun run build:sidecar` | 构建 Agent sidecar 二进制（`binaries/pi`） |
-| `bun run build:codegraph` | 构建 CodeGraph 二进制 |
+| `bun run build:codebasememory` | 构建 codebase-memory 二进制 |
 | `bun run test` | 运行前端测试（`vitest --run`） |
 | `bunx tsc --noEmit` | 前端类型检查 |
 
@@ -100,7 +100,7 @@ export default function (pi: ExtensionAPI) {
 ## 构建产物
 
 - `binaries/pi`：sidecar 单文件二进制，由 `npm run build:sidecar` 生成。
-- `binaries/codegraph/`：CodeGraph 二进制，由 `npm run build:codegraph` 生成，并在 `tauri.conf.json` 的 `resources` 中打包。
+- `binaries/codebase-memory/`：codebase-memory 单文件二进制，由 `npm run build:codebasememory` 生成，并在 `tauri.conf.json` 的 `resources` 中打包。
 
 ## 本地向量服务（embedding，独立模块）
 
@@ -125,4 +125,4 @@ export default function (pi: ExtensionAPI) {
 ## 提交与分支
 
 - commit message 遵循约定式提交（Conventional Commits），用中文描述，例如 `fix(sessions): 修复项目在资源管理器中打开无效`。
-- 不要提交 `node_modules`、`.codegraph`、构建产物等（已在 gitignore 中）。
+- 不要提交 `node_modules`、`.codebase-memory`、构建产物等（已在 gitignore 中）。

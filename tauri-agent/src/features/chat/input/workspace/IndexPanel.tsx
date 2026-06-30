@@ -329,7 +329,7 @@ export function IndexView({ workspace }: { workspace: string }) {
   );
 }
 
-/** 「索引」入口 chip：点开看当前 workspace 的 CodeGraph 索引状态 + 初始化/同步/重建。 */
+/** 「索引」入口 chip：点开看当前 workspace 的代码图谱索引状态 + 初始化/同步/重建。 */
 export function IndexButton() {
   const { workspace } = useAgentStoreContext();
   const [open, setOpen] = useState(false);

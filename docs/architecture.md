@@ -76,7 +76,7 @@ GrenAgent 是一个本地优先的桌面 AI 编码 Agent，由三层组成：
 | `code-review` | 结构化代码审查记录与报告 | `git_diff`、`review_note`、`/review` |
 | `diagnostics` | 环境 / 依赖诊断 | `diagnostics` |
 | `multi-agent` | 子代理委派 | `spawn_agent` |
-| `code-intel` | CodeGraph 只读探索子代理 | `explore_context` |
+| `code-intel` | codebase-memory 只读探索子代理 | `explore_context` |
 | `lsp` | 语言服务器：定义 / 引用 / 悬停等 | `lsp_definition`、`lsp_references` 等 |
 | `code-search` | 工作区代码索引与搜索 | `code_search`、`/code-index` |
 | `ast-tools` | AST 结构化搜索与编辑 | `ast_grep`、`ast_edit` |
@@ -119,7 +119,7 @@ GrenAgent 是一个本地优先的桌面 AI 编码 Agent，由三层组成：
 
 ## 代码智能
 
-内置 CodeGraph 作为离线、零配置的代码图谱引擎，基于 tree-sitter 与 SQLite，文件变更自动增量同步。二进制随应用打包（`tauri.conf.json` 的 `resources` 收录 `binaries/codegraph`），由 `code_intel` 相关 command 托管索引与查询。
+内置 codebase-memory 作为离线、零配置的代码图谱引擎，基于 tree-sitter 与 SQLite，文件变更自动增量同步。单文件二进制随应用打包（`tauri.conf.json` 的 `resources` 收录 `binaries/codebase-memory`），由 `code_intel` 相关 command 托管索引与查询（经 `<bin> cli <tool>`）；索引落在 `CBM_CACHE_DIR`（app 数据目录）。
 
 ## 数据存储
 
@@ -129,7 +129,7 @@ GrenAgent 是一个本地优先的桌面 AI 编码 Agent，由三层组成：
 | 知识库 | `<工作区>/.pi/knowledge/default.db`（SQLite） |
 | 生成的图片 | `<工作区>/.pi/images/` |
 | 合成的音频 | `<工作区>/.pi/audio/` |
-| 代码图谱 | `<工作区>/.codegraph/`（已被 gitignore） |
+| 代码图谱索引 | `<app 数据目录>/codebase-memory/`（`CBM_CACHE_DIR`，不落工作区） |
 
 ## 用量统计口径
 
@@ -141,4 +141,4 @@ GrenAgent 是一个本地优先的桌面 AI 编码 Agent，由三层组成：
 
 `embedding/` 是一个独立的本地向量服务，当前尚未集成进 sidecar 或桌面应用。它在本地 CPU 上用 `@huggingface/transformers` 运行 `Xenova/all-MiniLM-L6-v2`，通过 `POST /embed` 返回 384 维向量，并可用 Node.js SEA 打成单文件可执行程序。
 
-它面向未来的本地化向量检索（离线 RAG / 代码语义搜索等），无需远程 Embedding API。注意 `tauri.conf.json` 目前只打包 `binaries/pi` 与 `binaries/codegraph`，不含该服务。实现细节见 `embedding/README.md`。
+它面向未来的本地化向量检索（离线 RAG / 代码语义搜索等），无需远程 Embedding API。注意 `tauri.conf.json` 目前只打包 `binaries/pi` 与 `binaries/codebase-memory`，不含该服务。实现细节见 `embedding/README.md`。

@@ -3,7 +3,7 @@ import { Select, Switch, Tooltip } from 'antd';
 import { createStaticStyles, cssVar } from 'antd-style';
 import { Brain } from 'lucide-react';
 import { ModelSelectField } from '../settings/ModelSelectField';
-import { userConfiguredCodegraph } from './codeIntelYield';
+import { userConfiguredCodeIntel } from './codeIntelYield';
 
 const styles = createStaticStyles(({ css }) => ({
   hero: css`
@@ -106,17 +106,17 @@ interface CodeIntelTabProps {
 }
 
 const ENGINE_OPTIONS = [
-  { value: 'codegraph', label: 'CodeGraph（内置，默认）' },
+  { value: 'codebase-memory', label: 'codebase-memory（内置，默认）' },
   { value: 'off', label: '关闭' },
 ];
 
 export function CodeIntelTab({ values, setValue, onChange, onReload, knownToolNames }: CodeIntelTabProps) {
-  // 旧/未知引擎值（如已移除的 gitnexus）回落 codegraph，避免选择器显示空。
-  const rawEngine = values.CODE_INTEL ?? 'codegraph';
-  const engine = ENGINE_OPTIONS.some((o) => o.value === rawEngine) ? rawEngine : 'codegraph';
+  // 旧/未知引擎值（如已移除的 codegraph/gitnexus）回落 codebase-memory，避免选择器显示空。
+  const rawEngine = values.CODE_INTEL ?? 'codebase-memory';
+  const engine = ENGINE_OPTIONS.some((o) => o.value === rawEngine) ? rawEngine : 'codebase-memory';
   const autoInit = (values.CODE_INTEL_AUTO_INIT ?? '1') !== '0';
   const explorerOn = (values.CODE_INTEL_EXPLORER ?? '1') !== '0';
-  const yielded = userConfiguredCodegraph(values.MCP_SERVERS ?? '', knownToolNames);
+  const yielded = userConfiguredCodeIntel(values.MCP_SERVERS ?? '', knownToolNames);
 
   const setEngine = (v: string) => {
     setValue('CODE_INTEL', v);
@@ -146,7 +146,7 @@ export function CodeIntelTab({ values, setValue, onChange, onReload, knownToolNa
         <div>
           <div className={styles.heroTitle}>代码智能</div>
           <div className={styles.heroDesc}>
-            基于 CodeGraph 的离线代码图谱：为 agent 提供符号检索、调用关系与只读探索能力，索引与查询全部本地完成。
+            基于 codebase-memory 的离线代码图谱：为 agent 提供符号检索、调用关系与只读探索能力，索引与查询全部本地完成。
           </div>
         </div>
       </div>
@@ -159,11 +159,11 @@ export function CodeIntelTab({ values, setValue, onChange, onReload, knownToolNa
           <div className={styles.row}>
             <div>
               <div className={styles.rowLabel}>代码图谱引擎</div>
-              <div className={styles.rowDesc}>CodeGraph 为内置离线引擎；切换经热更新生效</div>
+              <div className={styles.rowDesc}>codebase-memory 为内置离线引擎；切换经热更新生效</div>
             </div>
             <Flexbox horizontal align="center" gap={8}>
               {yielded ? (
-                <Tooltip title="检测到你已自配 codegraph MCP，内置引擎自动让位">
+                <Tooltip title="检测到你已自配 codebase-memory MCP，内置引擎自动让位">
                   <span className={styles.engineBadge} data-testid="code-intel-badge">
                     内置让位
                   </span>
@@ -190,7 +190,7 @@ export function CodeIntelTab({ values, setValue, onChange, onReload, knownToolNa
           <div className={styles.row}>
             <div>
               <div className={styles.rowLabel}>打开 workspace 时自动初始化</div>
-              <div className={styles.rowDesc}>无 .codegraph 时后台自动 init（CODE_INTEL_AUTO_INIT）</div>
+              <div className={styles.rowDesc}>未索引时后台自动 init（CODE_INTEL_AUTO_INIT）</div>
             </div>
             <Switch size="small" checked={autoInit} data-testid="code-intel-autoinit" onChange={toggleAutoInit} />
           </div>

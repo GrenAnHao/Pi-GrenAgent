@@ -30,7 +30,7 @@ function renderTab(values: Record<string, string> = {}) {
 
 describe('CodeIntelTab', () => {
   it('changing engine writes CODE_INTEL and marks changed', async () => {
-    const { setValue, onChange, container } = renderTab({ CODE_INTEL: 'codegraph' });
+    const { setValue, onChange, container } = renderTab({ CODE_INTEL: 'codebase-memory' });
     // antd Select：打开下拉后选「关闭」。下拉项渲染在 portal；用模糊 class 兼容任意 prefixCls。
     const selector =
       container.querySelector('[class*="select-selector"]') ?? container.querySelector('[role="combobox"]');
@@ -42,17 +42,22 @@ describe('CodeIntelTab', () => {
     expect(onChange).toHaveBeenCalled();
   });
 
-  it('falls back to codegraph display for a removed/unknown engine value (legacy gitnexus)', () => {
+  it('falls back to codebase-memory display for a removed/unknown engine value (legacy gitnexus)', () => {
     renderTab({ CODE_INTEL: 'gitnexus' });
-    // 选择器回落显示 CodeGraph，不再渲染 gitnexus。
-    expect(screen.getByText('CodeGraph（内置，默认）')).toBeTruthy();
+    // 选择器回落显示 codebase-memory，不再渲染 gitnexus。
+    expect(screen.getByText('codebase-memory（内置，默认）')).toBeTruthy();
     expect(screen.queryByText(/GitNexus/i)).toBeNull();
   });
 
-  it('shows the yield badge when a user codegraph tool is present', () => {
+  it('shows the yield badge when a user codebase-memory signature is present', () => {
     render(
       <ThemeProvider>
-        <CodeIntelTab values={{}} setValue={vi.fn()} onChange={vi.fn()} knownToolNames={['codegraph_explore']} />
+        <CodeIntelTab
+          values={{}}
+          setValue={vi.fn()}
+          onChange={vi.fn()}
+          knownToolNames={['search_graph', 'trace_path']}
+        />
       </ThemeProvider>,
     );
     expect(screen.getByTestId('code-intel-badge').textContent).toContain('让位');
