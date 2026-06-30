@@ -18,15 +18,21 @@ jobs:
           - platform: macos-latest
             args: '--target aarch64-apple-darwin'
             rust_targets: ''
-          - platform: macos-latest
+            sidecar_target: aarch64-apple-darwin
+          # Intel macOS DMG must build on an x86_64 runner: bun --compile produces a
+          # host-arch binary, so an ARM runner cannot produce a usable pi-x86_64 sidecar.
+          - platform: macos-15-intel
             args: '--target x86_64-apple-darwin'
             rust_targets: x86_64-apple-darwin
+            sidecar_target: x86_64-apple-darwin
           - platform: ubuntu-22.04
             args: ''
             rust_targets: ''
+            sidecar_target: ''
           - platform: windows-latest
             args: ''
             rust_targets: ''
+            sidecar_target: ''
 
     runs-on: ${{ matrix.platform }}
     env:
@@ -70,11 +76,28 @@ jobs:
 
       - name: Build sidecar
         working-directory: tauri-agent
+        env:
+          PI_SIDECAR_TARGET: ${{ matrix.sidecar_target }}
         run: bun run build:sidecar
 
       - name: Build codebase-memory binary
         working-directory: tauri-agent
         run: bun run build:codebasememory
+
+      - name: Read release notes
+        if: startsWith(github.ref, 'refs/tags/')
+        id: notes
+        run: |
+          NOTES=".github/release-notes/${GITHUB_REF_NAME}.md"
+          if [ ! -f "$NOTES" ]; then
+            echo "Release notes not found: $NOTES" >&2
+            exit 1
+          fi
+          {
+            echo 'body<<EOF'
+            cat "$NOTES"
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
 
       - name: Build and release
         uses: tauri-apps/tauri-action@v0
@@ -84,7 +107,7 @@ jobs:
           projectPath: tauri-agent
           tagName: ${{ github.ref_name }}
           releaseName: GrenAgent v__VERSION__
-          releaseBodyPath: .github/release-notes/${{ github.ref_name }}.md
+          releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}

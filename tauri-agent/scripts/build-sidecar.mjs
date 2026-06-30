@@ -24,13 +24,19 @@ const extensionsRoot = resolve(appRoot, '..', 'extensions');
 console.log('Installing extensions deps…');
 execSync('npm install', { cwd: extensionsRoot, stdio: 'inherit' });
 
-// 2) 取 rustc host target triple（Tauri sidecar 命名约定）。
-const hostLine = execSync('rustc -Vv')
-  .toString()
-  .split('\n')
-  .find((l) => l.startsWith('host:'));
-if (!hostLine) throw new Error('could not determine rustc host triple');
-const triple = hostLine.split('host:')[1].trim();
+// 2) 取 sidecar 目标 triple：CI 交叉编译时由 PI_SIDECAR_TARGET 指定（须与 Tauri --target 一致），
+//    否则用 rustc host triple（本地 dev / 原生 runner）。
+function sidecarTriple() {
+  const explicit = process.env.PI_SIDECAR_TARGET?.trim();
+  if (explicit) return explicit;
+  const hostLine = execSync('rustc -Vv')
+    .toString()
+    .split('\n')
+    .find((l) => l.startsWith('host:'));
+  if (!hostLine) throw new Error('could not determine rustc host triple');
+  return hostLine.split('host:')[1].trim();
+}
+const triple = sidecarTriple();
 const isWin = triple.includes('windows');
 const dest = join(binDir, `pi-${triple}${isWin ? '.exe' : ''}`);
 
