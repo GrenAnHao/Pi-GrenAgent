@@ -2,10 +2,8 @@ import type { ExtensionAPI, ProjectTrustEventResult } from "@earendil-works/pi-c
 import { extractPath, isDangerousBash, isMutatingBash, isUnderCwd, matchProtectedPath, matchWriteAllowed } from "./rules.js";
 import { getApprovalPolicy } from "../_shared/approval.js";
 import { getConfig } from "../_shared/runtime-config.js";
-import { sandboxAvailable, sandboxOn } from "../_shared/sandbox-gate.js";
 import {
-  HOST_FALLBACK_EXEC_TOOLS,
-  HOST_ONLY_EXEC_TOOLS,
+  CODE_EXEC_TOOLS,
   NET_TOOLS as NET_TOOL_NAMES,
   WRITE_TOOLS,
 } from "../_shared/tool-groups.js";
@@ -14,16 +12,8 @@ const off = (v: string | undefined) => v === "0" || v?.toLowerCase() === "false"
 // 工具分组取自单一真相源（_shared/tool-groups），避免与 capability 能力闸各维护一份而漂移失配。
 const NET_TOOLS = new Set<string>(NET_TOOL_NAMES);
 const WRITE_BYPASS_TOOLS = new Set<string>(WRITE_TOOLS);
-const HOST_FALLBACK_EXEC = new Set<string>(HOST_FALLBACK_EXEC_TOOLS);
-const HOST_ONLY_EXEC = new Set<string>(HOST_ONLY_EXEC_TOOLS);
-
-// 沙箱激活（且非「完全访问」）时预先注入的工具约束提示：让 agent 一上来就用对的工具，不必撞
-// 「bash 已禁用」/「sandbox 越界 not accessible」后才回退到 read/ls。display:false 不进可见对话。
-const SANDBOX_HINT =
-  "【沙箱模式】本会话内置 bash 已禁用。优先用内置工具：读文件用 read、列目录用 ls、查找用 find / grep" +
-  "——它们在宿主直接可用、可访问任意路径、不受沙箱限制。仅当确需执行 shell 命令时才用 sandbox_sh" +
-  "（隔离环境：只能访问当前 workspace 目录、网络默认禁；不要让它访问 workspace 之外的路径，否则会 not accessible）。" +
-  "不要调用内置 bash。（这是系统约束提示，无需在回复里复述或记忆。）";
+// 代码执行工具（py_run/js_run/dap_*）一律在宿主进程执行（node:vm 可逃逸 / python 子进程 / 调试器）。
+const CODE_EXEC = new Set<string>(CODE_EXEC_TOOLS);
 
 export default function (pi: ExtensionAPI) {
   pi.on("tool_call", async (event, ctx) => {
@@ -64,16 +54,8 @@ export default function (pi: ExtensionAPI) {
     const policy = getApprovalPolicy();
     if (policy === "full") return undefined;
 
-    // ③ 沙箱激活时禁内置 bash，steer 到 sandbox_sh（隔离执行）。
-    if (event.toolName === "bash" && (await sandboxOn())) {
-      return {
-        block: true,
-        reason: "沙箱模式：内置 bash 已禁用，请改用 sandbox_sh（隔离环境执行，写限 workspace、网络默认禁）。",
-      };
-    }
-
-    // ④ 请求批准（ask）：仅在有 UI 时逐次确认；headless（子代理）无法确认 → 降级为 auto 行为
-    //    （不阻断，避免继承 ask 的子代理被全拦），仍受 ⑤ 危险命令/受保护路径门控。
+    // ③ 请求批准（ask）：仅在有 UI 时逐次确认；headless（子代理）无法确认 → 降级为 auto 行为
+    //    （不阻断，避免继承 ask 的子代理被全拦），仍受 ④ 危险命令/受保护路径门控。
     if (policy === "ask" && ctx.hasUI) {
       // 外部 MCP 工具（名为 mcp__server__tool，含 fetch 等）与内置联网工具 → 逐次确认。
       const isMcp = event.toolName.startsWith("mcp__");
@@ -91,23 +73,22 @@ export default function (pi: ExtensionAPI) {
           if (choice !== "允许") return { block: true, reason: "用户拒绝越界写" };
         }
       }
-      // shell 越界写缺口：沙箱可用时 bash 已被禁（③）；沙箱不可用时，会改动文件的命令需确认。
-      if (event.toolName === "bash" && isMutatingBash(String(event.input?.command ?? "")) && !(await sandboxAvailable())) {
+      // shell 会改动文件的命令需确认。
+      if (event.toolName === "bash" && isMutatingBash(String(event.input?.command ?? ""))) {
         const choice = await ctx.ui.select(
           `请求批准：允许执行会改动文件的命令？\n\n  ${String(event.input?.command ?? "")}`,
           ["允许", "拒绝"],
         );
         if (choice !== "允许") return { block: true, reason: "用户拒绝改动文件的命令" };
       }
-      // 宿主代码执行：dap_* 总在宿主跑；py_run/js_run 在沙箱不可用时回退宿主内核（node:vm 可逃逸 /
-      // python 子进程）。这些不经 ③ 的 bash 闸，ask 下单独确认；沙箱可用时 py_run/js_run 进沙箱、免确认。
-      if (HOST_ONLY_EXEC.has(event.toolName) || (HOST_FALLBACK_EXEC.has(event.toolName) && !(await sandboxAvailable()))) {
+      // 宿主代码执行（py_run/js_run 走常驻内核、dap_* 启动/求值被调试程序，均可逃逸到宿主）：ask 下单独确认。
+      if (CODE_EXEC.has(event.toolName)) {
         const choice = await ctx.ui.select(`请求批准：允许在宿主执行代码？\n\n  ${event.toolName}`, ["允许", "拒绝"]);
         if (choice !== "允许") return { block: true, reason: `用户拒绝在宿主执行代码：${event.toolName}` };
       }
     }
 
-    // ⑤ 既有：危险命令确认 + 受保护路径拦写（auto 与 ask 共用）。
+    // ④ 既有：危险命令确认 + 受保护路径拦写（auto 与 ask 共用）。
     const guardBash = !off(getConfig("SAFETY_BASH_CONFIRM"));
     const guardPaths = !off(getConfig("SAFETY_PROTECT_PATHS"));
     if (guardBash && event.toolName === "bash") {
@@ -125,14 +106,6 @@ export default function (pi: ExtensionAPI) {
       }
     }
     return undefined;
-  });
-
-  // 沙箱激活且非「完全访问」时，每轮开始前注入一条工具约束提示，让 agent 直接用对工具（read/ls/find/grep
-  // 在宿主可用；shell 走 sandbox_sh、限 workspace），不再撞「bash 禁用 / sandbox 越界」才回退。
-  pi.on("before_agent_start", async () => {
-    if (getApprovalPolicy() === "full") return undefined;
-    if (!(await sandboxOn())) return undefined;
-    return { message: { customType: "sandbox-hint", content: SANDBOX_HINT, display: false } };
   });
 
   // project_trust 必须返回 { trusted: "yes"|"no"|"undecided" }（官方 ProjectTrustEventResult），不是 block。

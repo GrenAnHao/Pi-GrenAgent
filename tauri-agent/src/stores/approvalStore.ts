@@ -13,9 +13,9 @@ export const APPROVAL_LABELS: Record<ApprovalPolicy, string> = {
 
 /** 审批策略说明（选择器副标题 / tooltip 用）。 */
 export const APPROVAL_HINTS: Record<ApprovalPolicy, string> = {
-  ask: '沙箱执行；写工作区外/联网/危险命令时询问',
-  auto: '沙箱执行；仅危险命令时询问',
-  full: '关沙箱、宿主完整访问，不询问',
+  ask: '写工作区外 / 联网 / 执行代码 / 改文件或危险命令时询问',
+  auto: '仅危险命令 / 受保护路径时询问',
+  full: '完整访问、不询问（子代理能力限制仍生效）',
 };
 
 export function isApprovalPolicy(v: unknown): v is ApprovalPolicy {

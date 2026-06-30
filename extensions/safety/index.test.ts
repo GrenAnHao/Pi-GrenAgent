@@ -1,12 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../_shared/approval.js", () => ({ getApprovalPolicy: vi.fn() }));
-vi.mock("../_shared/sandbox-gate.js", () => ({ sandboxOn: vi.fn(), sandboxAvailable: vi.fn() }));
 vi.mock("../_shared/runtime-config.js", () => ({ getConfig: vi.fn() }));
 
 import { getApprovalPolicy } from "../_shared/approval.js";
 import { getConfig } from "../_shared/runtime-config.js";
-import { sandboxAvailable, sandboxOn } from "../_shared/sandbox-gate.js";
 import safety from "./index.js";
 
 type ToolCall = (event: unknown, ctx: unknown) => Promise<{ block?: boolean; reason?: string } | undefined>;
@@ -18,20 +16,10 @@ function setup(): ToolCall {
   return (event, ctx) => handler!(event, ctx);
 }
 
-type BeforeStart = () => Promise<{ message?: { content?: string; display?: boolean } } | undefined>;
-function setupBeforeStart(): BeforeStart {
-  let handler: BeforeStart | undefined;
-  const pi = { on: (ev: string, h: BeforeStart) => { if (ev === "before_agent_start") handler = h; } };
-  safety(pi as unknown as Parameters<typeof safety>[0]);
-  return handler!;
-}
-
 const cwd = process.platform === "win32" ? "D:\\proj" : "/proj";
 
 beforeEach(() => {
   vi.resetAllMocks();
-  vi.mocked(sandboxOn).mockResolvedValue(false);
-  vi.mocked(sandboxAvailable).mockResolvedValue(false);
   vi.mocked(getConfig).mockReturnValue(undefined);
 });
 
@@ -89,9 +77,8 @@ describe("safety approval gating", () => {
     expect(r).toBeUndefined();
   });
 
-  it("ask: confirms mutating bash when sandbox unavailable", async () => {
+  it("ask: confirms mutating bash", async () => {
     vi.mocked(getApprovalPolicy).mockReturnValue("ask");
-    vi.mocked(sandboxAvailable).mockResolvedValue(false);
     const ui = { select: vi.fn().mockResolvedValue("拒绝") };
     const r = await setup()({ toolName: "bash", input: { command: "rm foo" } }, { hasUI: true, cwd, ui });
     expect(ui.select).toHaveBeenCalled();
@@ -114,14 +101,6 @@ describe("safety approval gating", () => {
     expect(r).toBeUndefined();
   });
 
-  it("blocks built-in bash when sandbox is on (steer to sandbox_sh)", async () => {
-    vi.mocked(getApprovalPolicy).mockReturnValue("auto");
-    vi.mocked(sandboxOn).mockResolvedValue(true);
-    const r = await setup()({ toolName: "bash", input: { command: "ls" } }, { hasUI: true, cwd, ui: {} });
-    expect(r?.block).toBe(true);
-    expect(r?.reason).toContain("sandbox_sh");
-  });
-
   it("readonly blocks ast_edit / hl_edit (write-allowlist bypass writers)", async () => {
     vi.mocked(getApprovalPolicy).mockReturnValue("auto");
     vi.mocked(getConfig).mockImplementation((k: string) => (k === "SAFETY_READONLY" ? "1" : undefined));
@@ -131,51 +110,18 @@ describe("safety approval gating", () => {
     expect(r2?.block).toBe(true);
   });
 
-  it("ask: confirms host code execution (py_run) when sandbox unavailable", async () => {
+  it("ask: confirms host code execution (py_run)", async () => {
     vi.mocked(getApprovalPolicy).mockReturnValue("ask");
-    vi.mocked(sandboxAvailable).mockResolvedValue(false);
     const ui = { select: vi.fn().mockResolvedValue("拒绝") };
     const r = await setup()({ toolName: "py_run", input: { code: "x=1" } }, { hasUI: true, cwd, ui });
     expect(ui.select).toHaveBeenCalled();
     expect(r?.block).toBe(true);
   });
 
-  it("ask: does NOT confirm py_run when sandbox available (runs sandboxed)", async () => {
+  it("ask: confirms dap_launch (host execution)", async () => {
     vi.mocked(getApprovalPolicy).mockReturnValue("ask");
-    vi.mocked(sandboxAvailable).mockResolvedValue(true);
-    const ui = { select: vi.fn() };
-    const r = await setup()({ toolName: "py_run", input: { code: "x=1" } }, { hasUI: true, cwd, ui });
-    expect(ui.select).not.toHaveBeenCalled();
-    expect(r).toBeUndefined();
-  });
-
-  it("ask: confirms dap_launch (always host execution, even with sandbox)", async () => {
-    vi.mocked(getApprovalPolicy).mockReturnValue("ask");
-    vi.mocked(sandboxAvailable).mockResolvedValue(true);
     const ui = { select: vi.fn().mockResolvedValue("拒绝") };
     const r = await setup()({ toolName: "dap_launch", input: { program: "x.py" } }, { hasUI: true, cwd, ui });
     expect(r?.block).toBe(true);
-  });
-});
-
-describe("safety sandbox hint (before_agent_start)", () => {
-  it("沙箱开启 + 非 full：注入工具约束提示（引导 sandbox_sh / read，不撞 bash 禁用）", async () => {
-    vi.mocked(getApprovalPolicy).mockReturnValue("ask");
-    vi.mocked(sandboxOn).mockResolvedValue(true);
-    const r = await setupBeforeStart()();
-    expect(r?.message?.content).toContain("sandbox_sh");
-    expect(r?.message?.display).toBe(false);
-  });
-
-  it("full：不注入（完全访问无沙箱限制）", async () => {
-    vi.mocked(getApprovalPolicy).mockReturnValue("full");
-    vi.mocked(sandboxOn).mockResolvedValue(true);
-    expect(await setupBeforeStart()()).toBeUndefined();
-  });
-
-  it("沙箱关闭：不注入", async () => {
-    vi.mocked(getApprovalPolicy).mockReturnValue("ask");
-    vi.mocked(sandboxOn).mockResolvedValue(false);
-    expect(await setupBeforeStart()()).toBeUndefined();
   });
 });

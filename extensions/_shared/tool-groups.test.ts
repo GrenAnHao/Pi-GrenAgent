@@ -1,12 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  CODE_EXEC_TOOLS,
-  HOST_FALLBACK_EXEC_TOOLS,
-  HOST_ONLY_EXEC_TOOLS,
-  NET_TOOLS,
-  SANDBOXABLE_EXEC_TOOLS,
-  WRITE_TOOLS,
-} from "./tool-groups.js";
+import { CODE_EXEC_TOOLS, NET_TOOLS, WRITE_TOOLS } from "./tool-groups.js";
 
 describe("tool-groups", () => {
   it("NET_TOOLS lists real registered networking tools (no phantom names)", () => {
@@ -31,15 +24,9 @@ describe("tool-groups", () => {
     expect([...WRITE_TOOLS].sort()).toEqual(["ast_edit", "hl_edit"]);
   });
 
-  it("CODE_EXEC_TOOLS = sandboxable ∪ host-only, deduped", () => {
-    expect([...CODE_EXEC_TOOLS].sort()).toEqual(
-      [...new Set([...SANDBOXABLE_EXEC_TOOLS, ...HOST_ONLY_EXEC_TOOLS])].sort(),
-    );
+  it("CODE_EXEC_TOOLS are the host-executed code tools (deduped, no removed sandbox_sh)", () => {
+    expect([...CODE_EXEC_TOOLS].sort()).toEqual(["dap_evaluate", "dap_launch", "js_run", "py_run"]);
     expect(new Set(CODE_EXEC_TOOLS).size).toBe(CODE_EXEC_TOOLS.length);
-  });
-
-  it("HOST_FALLBACK_EXEC_TOOLS ⊂ SANDBOXABLE (and excludes sandbox_sh)", () => {
-    for (const t of HOST_FALLBACK_EXEC_TOOLS) expect(SANDBOXABLE_EXEC_TOOLS).toContain(t);
-    expect(HOST_FALLBACK_EXEC_TOOLS as readonly string[]).not.toContain("sandbox_sh");
+    expect(CODE_EXEC_TOOLS as readonly string[]).not.toContain("sandbox_sh");
   });
 });

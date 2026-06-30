@@ -20,7 +20,7 @@ const ICONS: Record<ApprovalPolicy, LucideIcon> = {
 
 /**
  * 审批策略选择器：请求批准 / 替我审批 / 完全访问，与「模式」并列。
- * 每级是预设（沙箱 scope + 确认级别）。当前级别由 sidecar approval 扩展经 setStatus
+ * 每级是一档确认强度（驱动 safety 的逐次确认行为）。当前级别由 sidecar approval 扩展经 setStatus
  * 推送到 approvalStore（切会话/刷新回读）；切换走 agent_set_approval（底层 /approval，不调 LLM）。
  */
 export default function ApprovalAction() {

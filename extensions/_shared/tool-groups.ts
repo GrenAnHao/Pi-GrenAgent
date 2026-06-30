@@ -23,21 +23,6 @@ export const NET_TOOLS = [
 // 故 readonly 模式必须单独拦截，否则 fs 隔离可被它们绕过。
 export const WRITE_TOOLS = ["ast_edit", "hl_edit"] as const;
 
-// 代码执行工具——沙箱可用时进 WSL2 沙箱（受限）、不可用时在宿主直跑（node:vm 可逃逸 / python 子进程）。
-export const SANDBOXABLE_EXEC_TOOLS = ["py_run", "js_run", "sandbox_sh"] as const;
-
-// 沙箱不可用时回退到宿主内核执行的代码工具（ask 策略需对其二次确认）。
-// sandbox_sh 不在此列：它不回退，沙箱不可用时直接返回「不可用」不执行。
-export const HOST_FALLBACK_EXEC_TOOLS = ["py_run", "js_run"] as const;
-
-// 代码执行工具——总在宿主执行、不经沙箱（调试器启动被调试程序 / 求值表达式）。
-export const HOST_ONLY_EXEC_TOOLS = ["dap_launch", "dap_evaluate"] as const;
-
-// 全部代码执行工具（能力闸按此整体 deny）。
-export const CODE_EXEC_TOOLS = [
-  "py_run",
-  "js_run",
-  "sandbox_sh",
-  "dap_launch",
-  "dap_evaluate",
-] as const;
+// 代码执行工具——均在宿主进程执行（py_run/js_run 走常驻内核：node:vm 可逃逸 / python 子进程；
+// dap_* 启动/求值被调试程序）。ask 策略下需对其二次确认；能力闸（受限 fs / 受限 IM 会话）按此整体 deny。
+export const CODE_EXEC_TOOLS = ["py_run", "js_run", "dap_launch", "dap_evaluate"] as const;

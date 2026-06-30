@@ -11,6 +11,6 @@ describe("code-exec extension", () => {
       on: () => {},
     };
     codeExec(pi as unknown as Parameters<typeof codeExec>[0]);
-    expect(names).toEqual(["sandbox_sh", "py_run", "py_reset", "js_run", "js_reset"]);
+    expect(names).toEqual(["py_run", "py_reset", "js_run", "js_reset"]);
   });
 });
