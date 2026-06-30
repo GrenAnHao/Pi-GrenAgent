@@ -9,8 +9,8 @@ export interface McpServerConfig {
   args?: string[];
   env?: Record<string, string>;
   url?: string;
-  /** stdio server 工作目录（透传给 StdioClientTransport）。内置 codegraph 用它把 cwd
-   *  设到 bundle 目录，使相对入口生效、规避含空格路径在 spawn worker 时被截断。 */
+  /** stdio server 工作目录（透传给 StdioClientTransport）。内置 codebase-memory 用它把 cwd
+   *  设到 ${workspaceFolder}，对齐 cbm 的 session 检测（auto-index 用）。 */
   cwd?: string;
 }
 
@@ -64,8 +64,9 @@ export function parseMcpServers(json: string): McpServerConfig[] {
 }
 
 // 默认内置服务注入：
-// 1) 代码图谱引擎（CODE_INTEL，默认 codegraph）：命令指向随 app 打包的二进制（PI_PACKAGE_DIR）。
-//    用户在 MCP_SERVERS 自配同名 server，或配了暴露 codegraph_* 工具的 server 时，内置让位。
+// 1) 代码图谱引擎（CODE_INTEL，默认 codebase-memory）：命令指向随 app 打包的二进制（PI_PACKAGE_DIR）。
+//    用户在 MCP_SERVERS 自配同名 server，或配了暴露同引擎签名工具（如 search_graph+trace_path）的
+//    server 时，内置让位。
 // 2) open-webSearch（多引擎搜索 bing/baidu/sogou/csdn/掘金 + 文章抓取，零配置）：OPEN_WEBSEARCH=0 关闭，
 //    用户自定义同名 server 时以用户配置为准。Windows 经 `cmd /c npx`，其余平台直接用 npx。
 export function injectDefaultServers(
@@ -76,10 +77,10 @@ export function injectDefaultServers(
 ): McpServerConfig[] {
   let out = servers;
 
-  // 1) code-intel 引擎（默认 codegraph；off 关闭）。需 PI_PACKAGE_DIR 解析捆绑二进制。
-  // 旧值/未知引擎（如已移除的 gitnexus）回落 codegraph，避免迁移用户代码智能静默失效。
-  const requested = env.CODE_INTEL ?? "codegraph";
-  const engineName = requested === "off" ? "off" : getEngine(requested) ? requested : "codegraph";
+  // 1) code-intel 引擎（默认 codebase-memory；off 关闭）。需 PI_PACKAGE_DIR 解析捆绑二进制。
+  // 旧值/未知引擎（如已移除的 codegraph/gitnexus）回落 codebase-memory，避免迁移用户代码智能静默失效。
+  const requested = env.CODE_INTEL ?? "codebase-memory";
+  const engineName = requested === "off" ? "off" : getEngine(requested) ? requested : "codebase-memory";
   const engine = engineName === "off" ? undefined : getEngine(engineName);
   if (engine) {
     const sameName = out.some((s) => s.name === engine.serverName);
@@ -120,9 +121,10 @@ export function sanitize(s: string): string {
 
 // Expand VSCode-style ${workspaceFolder} / ${cwd} placeholders in a server's
 // command/args/url/env against the agent's cwd. pi has no built-in expansion, so
-// without this a config like `codegraph --path ${workspaceFolder}` receives the
+// without this a config like `some-server --root ${workspaceFolder}` receives the
 // literal string and the server fails to start. Applied for BOTH main and sub
-// agents (see manager.defaultReadServers).
+// agents (see manager.defaultReadServers). The built-in codebase-memory engine
+// uses it to set cwd=${workspaceFolder}.
 export function expandServerVars(servers: McpServerConfig[], cwd: string): McpServerConfig[] {
   const sub = (s: string): string => s.replace(/\$\{workspaceFolder\}/g, cwd).replace(/\$\{cwd\}/g, cwd);
   return servers.map((srv) => ({

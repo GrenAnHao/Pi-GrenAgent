@@ -72,9 +72,9 @@ jobs:
         working-directory: tauri-agent
         run: bun run build:sidecar
 
-      - name: Build CodeGraph bundle
+      - name: Build codebase-memory binary
         working-directory: tauri-agent
-        run: bun run build:codegraph
+        run: bun run build:codebasememory
 
       - name: Build and release
         uses: tauri-apps/tauri-action@v0

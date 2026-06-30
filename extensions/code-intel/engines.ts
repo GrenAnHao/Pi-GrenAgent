@@ -4,50 +4,42 @@ import type { McpServerConfig } from "../mcp/config.js";
 export interface CodeIntelEngine {
   /** 注入用的规范 MCP server 名（也是让位判定的同名键）。 */
   serverName: string;
-  /** 该引擎暴露的工具前缀，用于「签名识别」用户自配同类引擎。 */
+  /** 该引擎暴露的工具前缀，用于「签名识别」用户自配同类引擎。无统一前缀时留空。 */
   toolPrefix: string;
+  /** 无前缀时的签名工具集：用户某 server 同时暴露这些工具即视为命中该引擎。 */
+  signatureTools?: string[];
   /** 由捆绑目录与平台构建 stdio McpServerConfig。 */
   buildConfig: (pkgDir: string, platform: string) => McpServerConfig;
 }
 
-// CodeGraph 是「目录型 bundle」（bundled Node + lib/dist + bin launcher），不是单文件二进制。
-// build-codegraph.mjs 把整目录放在 PI_PACKAGE_DIR/codegraph/。注入据此构造启动命令：
-//   unix : <dir>/bin/codegraph serve --mcp --path <ws>
-//   win32: <dir>/node.exe --liftoff-only <dir>/lib/dist/bin/codegraph.js serve --mcp --path <ws>
-// Windows 不能直接 spawn 包内 .cmd（CVE-2024-27980 加固），故经 node.exe + 入口 js；
-// --liftoff-only 同时规避 tree-sitter WASM 在 Node>=22 的 V8 turboshaft Zone OOM。
-function codegraphBundleDir(pkgDir: string): string {
-  return `${pkgDir.replace(/[\\/]+$/, "")}/codegraph`;
+// codebase-memory-mcp 是「单文件静态二进制」（非目录 bundle），由 build-codebasememory.mjs
+// 放在 PI_PACKAGE_DIR/codebase-memory/codebase-memory-mcp(.exe)。无参启动即 MCP/stdio 服务器
+// （JSON-RPC 2.0）。它是多项目的：不吃 codegraph 的 `--path`，查询按 `project=<slug>` 定位
+// （slug 在 explorer.ts 按 cwd 确定性算出注入）。索引落在 CBM_CACHE_DIR（默认
+// ~/.cache/codebase-memory-mcp）——该 env 经 process.env 继承给 MCP server，无需在此显式注入。
+function cbmBinDir(pkgDir: string): string {
+  return `${pkgDir.replace(/[\\/]+$/, "")}/codebase-memory`;
 }
 
 const ENGINES: Record<string, CodeIntelEngine> = {
-  codegraph: {
-    serverName: "codegraph",
-    toolPrefix: "codegraph_",
+  "codebase-memory": {
+    serverName: "codebase-memory",
+    // 无统一前缀（工具名是 search_graph/trace_path/query_graph/... ）→ 走签名工具集识别。
+    toolPrefix: "",
+    signatureTools: ["search_graph", "trace_path"],
     buildConfig: (pkgDir, platform) => {
-      const dir = codegraphBundleDir(pkgDir);
-      // --path ${workspaceFolder} 与本机 user MCP 配置一致；expandServerVars 展开为 agent cwd。
-      const serveArgs = ["serve", "--mcp", "--path", "${workspaceFolder}"];
-      if (platform === "win32") {
-        return {
-          name: "codegraph",
-          transport: "stdio",
-          command: `${dir}/node.exe`,
-          // 入口用相对路径（解析自 cwd=dir）。若用绝对含空格路径（如
-          // "D:/OneDrive/Project Files/..."），codegraph 在 MCP 的 piped/无 TTY 下用
-          // child_process 拉起索引 worker 时会在空格处截断入口，报
-          // "Cannot find module '.../Project'" / lstat 盘符。cwd=dir + 相对入口规避。
-          args: ["--liftoff-only", "lib/dist/bin/codegraph.js", ...serveArgs],
-          cwd: dir,
-          env: {},
-        };
-      }
+      const dir = cbmBinDir(pkgDir);
+      const exe = platform === "win32" ? "codebase-memory-mcp.exe" : "codebase-memory-mcp";
       return {
-        name: "codegraph",
+        name: "codebase-memory",
         transport: "stdio",
-        command: `${dir}/bin/codegraph`,
-        args: serveArgs,
-        cwd: dir,
+        command: `${dir}/${exe}`,
+        args: [],
+        // cwd=workspace：对齐 cbm 的 session 检测（仅 auto-index 用，默认关），无 codegraph 那种
+        // 含空格路径在 spawn worker 时被截断的问题，故单二进制无需相对入口规避。
+        cwd: "${workspaceFolder}",
+        // CBM_CACHE_DIR 经 process.env 继承（dev 默认 ~/.cache/codebase-memory-mcp；
+        // 打包后由 Rust 侧设为 app 可写数据目录）。
         env: {},
       };
     },
@@ -65,6 +57,8 @@ export function listEngineNames(): string[] {
 /** 用户自配的某 server 暴露的工具是否命中某引擎签名（即便其 server 名不同）。 */
 export function matchesEngineSignature(engineName: string, toolNames: string[]): boolean {
   const eng = ENGINES[engineName];
-  if (!eng || !eng.toolPrefix) return false;
-  return toolNames.some((t) => t.startsWith(eng.toolPrefix));
+  if (!eng) return false;
+  if (eng.toolPrefix) return toolNames.some((t) => t.startsWith(eng.toolPrefix));
+  if (eng.signatureTools?.length) return eng.signatureTools.every((s) => toolNames.includes(s));
+  return false;
 }

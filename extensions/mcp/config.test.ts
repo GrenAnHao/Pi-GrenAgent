@@ -70,60 +70,63 @@ describe("injectDefaultServers", () => {
 describe("injectDefaultServers · code-intel", () => {
   const base = { PI_PACKAGE_DIR: "/pkg" } as Record<string, string | undefined>;
 
-  it("injects codegraph by default (pointing at the bundle launcher)", () => {
-    const cg = injectDefaultServers([], { ...base, CODE_INTEL: "codegraph" }, "linux").find((s) => s.name === "codegraph");
-    expect(cg?.command).toBe("/pkg/codegraph/bin/codegraph");
-    expect(cg?.args).toEqual(["serve", "--mcp", "--path", "${workspaceFolder}"]);
-    expect(cg?.cwd).toBe("/pkg/codegraph");
+  it("injects codebase-memory by default (pointing at the single binary)", () => {
+    const cg = injectDefaultServers([], { ...base, CODE_INTEL: "codebase-memory" }, "linux").find(
+      (s) => s.name === "codebase-memory",
+    );
+    expect(cg?.command).toBe("/pkg/codebase-memory/codebase-memory-mcp");
+    expect(cg?.args).toEqual([]);
+    expect(cg?.cwd).toBe("${workspaceFolder}");
   });
 
-  it("sets cwd=bundle + relative entry on win32 (spawn-worker space safety)", () => {
-    const cg = injectDefaultServers([], { ...base, CODE_INTEL: "codegraph" }, "win32").find((s) => s.name === "codegraph");
-    expect(cg?.command).toBe("/pkg/codegraph/node.exe");
-    expect(cg?.args).toEqual([
-      "--liftoff-only",
-      "lib/dist/bin/codegraph.js",
-      "serve",
-      "--mcp",
-      "--path",
-      "${workspaceFolder}",
-    ]);
-    expect(cg?.cwd).toBe("/pkg/codegraph");
+  it("points at the .exe on win32 (single binary, no node launcher)", () => {
+    const cg = injectDefaultServers([], { ...base, CODE_INTEL: "codebase-memory" }, "win32").find(
+      (s) => s.name === "codebase-memory",
+    );
+    expect(cg?.command).toBe("/pkg/codebase-memory/codebase-memory-mcp.exe");
+    expect(cg?.args).toEqual([]);
+    expect(cg?.cwd).toBe("${workspaceFolder}");
   });
 
-  it("injects codegraph even when CODE_INTEL is unset (default engine)", () => {
-    expect(injectDefaultServers([], { ...base }, "linux").find((s) => s.name === "codegraph")).toBeTruthy();
+  it("injects codebase-memory even when CODE_INTEL is unset (default engine)", () => {
+    expect(injectDefaultServers([], { ...base }, "linux").find((s) => s.name === "codebase-memory")).toBeTruthy();
   });
 
   it("does not inject without PI_PACKAGE_DIR (keeps existing tests green)", () => {
-    expect(injectDefaultServers([], { CODE_INTEL: "codegraph" }, "linux")).toEqual([]);
+    expect(injectDefaultServers([], { CODE_INTEL: "codebase-memory" }, "linux")).toEqual([]);
   });
 
   it("skips injection when CODE_INTEL=off", () => {
-    expect(injectDefaultServers([], { ...base, CODE_INTEL: "off" }, "linux").find((s) => s.name === "codegraph")).toBeUndefined();
+    expect(
+      injectDefaultServers([], { ...base, CODE_INTEL: "off" }, "linux").find((s) => s.name === "codebase-memory"),
+    ).toBeUndefined();
   });
 
-  it("falls back to codegraph for a removed/unknown engine (e.g. legacy gitnexus)", () => {
-    const cg = injectDefaultServers([], { ...base, CODE_INTEL: "gitnexus" }, "linux").find((s) => s.name === "codegraph");
-    expect(cg?.command).toBe("/pkg/codegraph/bin/codegraph");
+  it("falls back to codebase-memory for a removed/unknown engine (e.g. legacy codegraph/gitnexus)", () => {
+    const cg = injectDefaultServers([], { ...base, CODE_INTEL: "codegraph" }, "linux").find(
+      (s) => s.name === "codebase-memory",
+    );
+    expect(cg?.command).toBe("/pkg/codebase-memory/codebase-memory-mcp");
   });
 
   it("yields when the user already configured a same-named server", () => {
-    const user = parseMcpServers('{"mcpServers":{"codegraph":{"command":"my-cg","args":["x"]}}}');
-    const out = injectDefaultServers(user, { ...base, CODE_INTEL: "codegraph" }, "linux");
-    expect(out.filter((s) => s.name === "codegraph")).toHaveLength(1);
-    expect(out.find((s) => s.name === "codegraph")?.command).toBe("my-cg");
+    const user = parseMcpServers('{"mcpServers":{"codebase-memory":{"command":"my-cbm","args":["x"]}}}');
+    const out = injectDefaultServers(user, { ...base, CODE_INTEL: "codebase-memory" }, "linux");
+    expect(out.filter((s) => s.name === "codebase-memory")).toHaveLength(1);
+    expect(out.find((s) => s.name === "codebase-memory")?.command).toBe("my-cbm");
   });
 
-  it("yields when a differently-named user server exposes codegraph_* tools", () => {
-    const user = parseMcpServers('{"mcpServers":{"my-cg":{"command":"x"}}}');
-    const out = injectDefaultServers(user, { ...base, CODE_INTEL: "codegraph" }, "linux", { "my-cg": ["codegraph_explore"] });
-    expect(out.find((s) => s.name === "codegraph")).toBeUndefined();
+  it("yields when a differently-named user server exposes the signature tools", () => {
+    const user = parseMcpServers('{"mcpServers":{"my-cbm":{"command":"x"}}}');
+    const out = injectDefaultServers(user, { ...base, CODE_INTEL: "codebase-memory" }, "linux", {
+      "my-cbm": ["search_graph", "trace_path"],
+    });
+    expect(out.find((s) => s.name === "codebase-memory")).toBeUndefined();
   });
 
-  it("still injects open-websearch alongside codegraph", () => {
+  it("still injects open-websearch alongside codebase-memory", () => {
     const out = injectDefaultServers([], { ...base, OPEN_WEBSEARCH: "1" }, "linux");
-    expect(out.find((s) => s.name === "codegraph")).toBeTruthy();
+    expect(out.find((s) => s.name === "codebase-memory")).toBeTruthy();
     expect(out.find((s) => s.name === "open-websearch")).toBeTruthy();
   });
 });

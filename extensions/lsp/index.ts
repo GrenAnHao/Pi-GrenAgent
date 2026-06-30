@@ -1,7 +1,7 @@
 // lsp：把语言服务器的语义能力暴露给模型（定义/引用/悬停/诊断/符号）。
 //
 // 按 (root, language) 复用一个 LspClient（spawn 对应服务器）。只读类工具，进 Ask/Plan 白名单。
-// 与 code-intel(codegraph 静态索引) 互补：全局/快速用 code-intel，类型精确/实时用 lsp。
+// 与 code-intel(codebase-memory 静态索引) 互补：全局/快速用 code-intel，类型精确/实时用 lsp。
 // 安全重命名(lsp_rename, WorkspaceEdit 应用)列二期；UTF-16 列精修、前端诊断面板亦二期。
 import { isAbsolute, relative, resolve } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";

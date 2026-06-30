@@ -1,9 +1,9 @@
 {
   "name": "pi-code-intel",
   "version": "0.1.0",
-  "description": "Built-in code intelligence (CodeGraph) tools for the Pi coding agent.",
+  "description": "Built-in code intelligence (codebase-memory) tools for the Pi coding agent.",
   "type": "module",
-  "keywords": ["pi-package", "pi-extension", "code-intelligence", "codegraph"],
+  "keywords": ["pi-package", "pi-extension", "code-intelligence", "codebase-memory"],
   "license": "MIT",
   "pi": {
     "extensions": ["./index.ts"]
