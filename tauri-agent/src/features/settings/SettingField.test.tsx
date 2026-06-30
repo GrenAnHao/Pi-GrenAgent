@@ -12,6 +12,16 @@ describe('SettingFieldInput', () => {
     expect(onChange).toHaveBeenCalledWith('1');
   });
 
+  it('boolean with default "1" shows on when value is empty (unset)', () => {
+    render(<SettingFieldInput field={{ key: 'D', label: 'D', type: 'boolean', default: '1' }} value="" onChange={() => {}} />);
+    expect(screen.getByTestId('set-field-D').getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('boolean without default shows off when value is empty (unset)', () => {
+    render(<SettingFieldInput field={{ key: 'E', label: 'E', type: 'boolean' }} value="" onChange={() => {}} />);
+    expect(screen.getByTestId('set-field-E').getAttribute('aria-checked')).toBe('false');
+  });
+
   it('text input reflects value and emits changes', () => {
     const onChange = vi.fn();
     render(<SettingFieldInput field={{ key: 'Y', label: 'Y', type: 'text' }} value="a" onChange={onChange} />);

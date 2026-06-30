@@ -14,7 +14,17 @@ const pruneEnabled = () => (getConfig("COMPACTION_POLICY_PRUNE") ?? "0") !== "0"
 const keepTurns = () => Number(getConfig("COMPACTION_POLICY_KEEP_TURNS") ?? "6") || 6;
 const minBody = () => Number(getConfig("COMPACTION_POLICY_MIN_BODY") ?? "1000") || 1000;
 const pressureEnabled = () => (getConfig("COMPACTION_POLICY_PRESSURE") ?? "1") !== "0";
-const compactPreview = () => (getConfig("COMPACTION_PREVIEW") ?? "0") !== "0";
+// 压缩前确认：默认开。压缩会把靠前的对话摘要化（模型只看摘要），用户反馈「会话开头内容像被吞了 /
+// 压缩后用量显示未知」，故默认改为压缩前弹确认，让用户看得到、可拒绝，而不是悄悄压。headless（无 UI）
+// 仍直接放行（下方 !ctx.hasUI 守卫），不阻塞自动化 / bot 场景。
+const compactPreview = () => (getConfig("COMPACTION_PREVIEW") ?? "1") !== "0";
+// 确认超时（ms）：到点仍无人应答则 fail-open 放行压缩，避免「hasUI=true 但无人值守」时回合永久挂起。
+// 0/空/非法 → 默认 180s（够有人值守时从容决定）；想永远等用户可设一个很大的值。
+const compactPreviewTimeoutMs = () => {
+  const raw = getConfig("COMPACTION_PREVIEW_TIMEOUT_MS");
+  const n = raw == null || raw.trim() === "" ? NaN : Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : 180000;
+};
 
 export default function (pi: ExtensionAPI) {
   // 用户驱动的上下文排除集（按消息 timestamp）。来源：会话内 context_exclusion 自定义条目（分支安全），
@@ -74,13 +84,30 @@ export default function (pi: ExtensionAPI) {
     },
   });
 
-  // 压缩接管：默认关；开启后压缩前用 ctx.ui 预览/取消。fail-open（UI 失败/超时放行默认压缩）。
+  // 压缩接管：默认开；压缩前用 ctx.ui 预览/取消。fail-open：UI 异常或超时未应答都放行默认压缩，
+  // 决不因为这道确认把回合卡死。headless（无 UI）直接放行。
   pi.on("session_before_compact", async (event, ctx) => {
     if (!compactPreview() || !ctx.hasUI) return undefined;
     try {
       const n =
         (event as { preparation?: { messagesToSummarize?: unknown[] } }).preparation?.messagesToSummarize?.length ?? 0;
-      const ok = await ctx.ui.confirm("压缩上下文", `将摘要约 ${n} 条消息。继续？`);
+      const confirmP = ctx.ui.confirm(
+        "压缩上下文（会把靠前的对话压成摘要）",
+        `上下文接近上限。继续＝把约 ${n} 条较早的消息压成摘要以腾出空间（此后模型只看摘要）；` +
+          `取消＝本次不压缩、保留原文（上下文可能很快不够用）。`,
+      );
+      const timeoutMs = compactPreviewTimeoutMs();
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const ok =
+        timeoutMs > 0
+          ? await Promise.race([
+              confirmP,
+              new Promise<boolean>((resolve) => {
+                timer = setTimeout(() => resolve(true), timeoutMs);
+              }),
+            ])
+          : await confirmP;
+      if (timer) clearTimeout(timer);
       if (!ok) return { cancel: true };
       return undefined;
     } catch {
@@ -102,6 +129,7 @@ export default function (pi: ExtensionAPI) {
       const { level, label } = classify(usage?.percent ?? null);
       ctx.ui.notify(
         `上下文：${usage?.tokens ?? "?"}/${usage?.contextWindow ?? "?"} tokens（${label}，级别 ${level}）\n` +
+          `压缩前确认：${compactPreview() ? "开" : "关"}\n` +
           `prune: ${pruneEnabled() ? "开" : "关"}（保护窗口 ${keepTurns()} 轮，最小裁剪 ${minBody()} 字符）\n` +
           `已移出上下文：${excluded.size} 条`,
         "info",

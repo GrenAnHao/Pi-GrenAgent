@@ -28,6 +28,9 @@ export interface SettingField {
   capability?: 'image' | 'embedding' | 'tts';
   /** 条件显示：仅当同页另一字段(key)的当前值在 equals 内时才渲染（如模型选择仅在策略=选定时显示）。 */
   showWhen?: { key: string; equals: string[] };
+  /** boolean 类型未落盘（值为空）时的默认显示态：'1'＝默认开。须与扩展侧 getConfig(...) ?? 默认 对齐，
+   *  否则会出现「扩展默认开、面板却显示关」的错配。省略＝默认关（空值显示为关，沿用旧约定）。 */
+  default?: '0' | '1';
 }
 
 export interface SettingSection {
@@ -63,6 +66,14 @@ export const SETTINGS_SCHEMA: SettingCategory[] = [
         placeholder: '如 anthropic/claude-haiku',
         description: 'provider/id；留空＝自动选轻量模型',
         effect: 'instant',
+      },
+      {
+        key: 'COMPACTION_PREVIEW',
+        label: '压缩上下文前确认',
+        type: 'boolean',
+        default: '1',
+        description:
+          '上下文将满需压缩时先弹确认，可拒绝本次压缩（默认开）。压缩会把靠前的对话压成摘要，关闭则自动压缩、不打扰。',
       },
     ],
   },

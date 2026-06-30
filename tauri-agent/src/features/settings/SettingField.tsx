@@ -44,7 +44,9 @@ interface Props {
 export function SettingFieldInput({ field, value, onChange, testIdPrefix = 'set-field' }: Props) {
   const { styles, cx } = useStyles();
   const testId = `${testIdPrefix}-${field.key}`;
-  const on = value === '1' || value.toLowerCase() === 'true';
+  // 未落盘（空值）时按 field.default 决定显示态：让「扩展侧默认开」的开关在面板上也默认显示为开，
+  // 避免「行为是开、面板显示关」的错配（见 settingsSchema 的 default 字段说明）。
+  const on = value === '1' || value.toLowerCase() === 'true' || (value === '' && field.default === '1');
 
   const control = () => {
     switch (field.type) {
