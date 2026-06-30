@@ -13,6 +13,7 @@ interface ConversationRowProps {
   onPinToggle: (cwd: string) => void;
   onSubmitRename: (cwd: string, path: string, name: string) => void;
   onRequestRename: (path: string) => void;
+  onReveal: (cwd: string) => void;
 }
 
 export const ConversationRow = memo(function ConversationRow({
@@ -26,10 +27,12 @@ export const ConversationRow = memo(function ConversationRow({
   onPinToggle,
   onSubmitRename,
   onRequestRename,
+  onReveal,
 }: ConversationRowProps) {
   const handleClick = useCallback(() => onOpen(item.cwd, item.sessionPath), [onOpen, item.cwd, item.sessionPath]);
   const handleDelete = useCallback(() => onDelete(item.cwd), [onDelete, item.cwd]);
   const handlePinToggle = useCallback(() => onPinToggle(item.cwd), [onPinToggle, item.cwd]);
+  const handleReveal = useCallback(() => onReveal(item.cwd), [onReveal, item.cwd]);
   const handleRename = useCallback(
     (name: string) => onSubmitRename(item.cwd, item.sessionPath, name),
     [onSubmitRename, item.cwd, item.sessionPath],
@@ -48,6 +51,7 @@ export const ConversationRow = memo(function ConversationRow({
       onRequestRename={handleRequestRename}
       onRename={handleRename}
       onDelete={handleDelete}
+      onReveal={handleReveal}
     />
   );
 });

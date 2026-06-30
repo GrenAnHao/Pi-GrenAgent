@@ -7,8 +7,15 @@ import { randomBytes } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "../_shared/sqlite.js";
+import { tailLines, LIVE_TRANSCRIPT_TAIL, TRANSCRIPT_CAP } from "./transcript-tail.js";
 
 export type SubAgentStatus = "running" | "done" | "error" | "cancelled";
+
+// progress() 的最小落盘间隔：运行期 `--mode json` 约每 150ms 一帧，但消费方（右坞子代理日志 /
+// 任务托盘）轮询 registry 仅 ~2.5s 一次，没必要每帧都把最多 64KB 的 transcript 同步写进 SQLite。
+// DatabaseSync 是同步的，高频大写入会阻塞 sidecar 事件循环并与只读轮询争锁。把落盘收敛到最多每
+// PROGRESS_PERSIST_MS 一次，足够喂饱 2.5s 的轮询；终态完整 transcript 由 finish() 兜底写一次。
+const PROGRESS_PERSIST_MS = 1000;
 
 export interface SubAgentRow {
   id: string;
@@ -20,20 +27,24 @@ export interface SubAgentRow {
   output: string | null;
   error: string | null;
   exitCode: number | null;
+  /** Raw `--mode json` JSONL stream, written incrementally while running (progress) and finalized on finish. */
+  transcript: string | null;
   createdAt: number;
   updatedAt: number;
 }
 
 export class SubAgentRegistry {
   private db: DatabaseSync | undefined;
+  /** progress() 每-id 的上次落盘时刻，用于把高频流式写入收敛到 PROGRESS_PERSIST_MS 间隔。 */
+  private lastProgressAt = new Map<string, number>();
 
   constructor(private readonly file: string) {}
 
   load(): void {
     if (this.db) return;
     mkdirSync(dirname(this.file), { recursive: true });
-    this.db = new DatabaseSync(this.file);
-    this.db.exec(
+    const db = new DatabaseSync(this.file);
+    db.exec(
       `CREATE TABLE IF NOT EXISTS subagents (
          id TEXT PRIMARY KEY,
          task TEXT NOT NULL,
@@ -43,11 +54,19 @@ export class SubAgentRegistry {
          output TEXT,
          error TEXT,
          exitCode INTEGER,
+         transcript TEXT,
          createdAt INTEGER NOT NULL,
          updatedAt INTEGER NOT NULL
        );
        CREATE INDEX IF NOT EXISTS idx_subagents_status ON subagents(status);`,
     );
+    // 迁移：旧库（v1，无 transcript 列）补列——CREATE TABLE IF NOT EXISTS 不会给已存在的表加列。
+    // 新库的 CREATE 已含该列，PRAGMA 命中即跳过 ALTER。
+    const cols = db.prepare("PRAGMA table_info(subagents)").all() as Array<{ name?: string }>;
+    if (!cols.some((c) => c.name === "transcript")) {
+      db.exec("ALTER TABLE subagents ADD COLUMN transcript TEXT");
+    }
+    this.db = db;
   }
 
   close(): void {
@@ -75,6 +94,7 @@ export class SubAgentRegistry {
       output: null,
       error: null,
       exitCode: null,
+      transcript: null,
       createdAt: now,
       updatedAt: now,
     };
@@ -88,11 +108,30 @@ export class SubAgentRegistry {
 
   finish(
     id: string,
-    patch: { status: SubAgentStatus; output?: string | null; error?: string | null; exitCode?: number | null },
+    patch: {
+      status: SubAgentStatus;
+      output?: string | null;
+      error?: string | null;
+      exitCode?: number | null;
+      transcript?: string | null;
+    },
   ): void {
+    // transcript 用 COALESCE：调用方不传 / 传空串(→null)时保留运行期 progress() 已写入的 transcript，
+    // 不会把实时累积的内容清空；传非空字符串则截断到上限后覆盖为最终 transcript。
     this.database
-      .prepare("UPDATE subagents SET status=?, output=?, error=?, exitCode=?, updatedAt=? WHERE id=?")
-      .run(patch.status, patch.output ?? null, patch.error ?? null, patch.exitCode ?? null, Date.now(), id);
+      .prepare(
+        "UPDATE subagents SET status=?, output=?, error=?, exitCode=?, transcript=COALESCE(?, transcript), updatedAt=? WHERE id=?",
+      )
+      .run(
+        patch.status,
+        patch.output ?? null,
+        patch.error ?? null,
+        patch.exitCode ?? null,
+        patch.transcript ? tailLines(patch.transcript, TRANSCRIPT_CAP) : null,
+        Date.now(),
+        id,
+      );
+    this.lastProgressAt.delete(id);
   }
 
   get(id: string): SubAgentRow | undefined {
@@ -107,7 +146,38 @@ export class SubAgentRegistry {
 
   /** Heartbeat: bump updatedAt for a running row (background spawn's stream calls this). */
   touch(id: string): void {
-    this.database.prepare("UPDATE subagents SET updatedAt=? WHERE id=? AND status='running'").run(Date.now(), id);
+    // best-effort：在子进程 stdout 流泵的 onUpdate 回调里被调用，写失败（偶发 SQLITE_BUSY 等）
+    // 绝不能抛进流处理器变成 uncaughtException 打断子代理流。丢一次心跳无害，下一帧再写。
+    try {
+      this.database.prepare("UPDATE subagents SET updatedAt=? WHERE id=? AND status='running'").run(Date.now(), id);
+    } catch {
+      /* 偶发争用：丢弃本次心跳，下个 tick 再试 */
+    }
+  }
+
+  /**
+   * Streaming progress: persist the latest raw JSONL transcript (and bump updatedAt) for a running row.
+   * Used in place of touch() on the streaming path so the UI can replay the sub-agent live by polling
+   * the registry. The `status='running'` guard makes a late update after finish() a harmless no-op.
+   */
+  progress(id: string, transcript: string): void {
+    // 落盘节流：见 PROGRESS_PERSIST_MS——流式每帧（~150ms）都同步写一次最多 64KB 的 TEXT 既阻塞
+    // 事件循环、又与只读轮询争锁，而消费方仅 ~2.5s 轮询一次。每-id 收敛到至多每 PROGRESS_PERSIST_MS
+    // 落盘一次（首帧立即写，保证预览尽快出现）；被跳过的帧无害（transcript 是累计量，下次写即最新）。
+    const now = Date.now();
+    if (now - (this.lastProgressAt.get(id) ?? 0) < PROGRESS_PERSIST_MS) return;
+    this.lastProgressAt.set(id, now);
+    // best-effort：本方法在子进程 stdout 流泵的 onUpdate 回调里被调用，写失败绝不能抛进流处理器
+    // 变成 uncaughtException（会打断子代理流、扰乱 sidecar）。丢这一帧即可，下一帧再写。
+    try {
+      // 写入侧统一截断：运行期 transcript 随 `--mode json` 的 message_update 呈 O(n^2) 膨胀，只留尾部
+      // 定长片段（与主对话内联流同口径），避免 DB 写超大 TEXT、前端轮询读全量经 IPC 卡顿。
+      this.database
+        .prepare("UPDATE subagents SET transcript=?, updatedAt=? WHERE id=? AND status='running'")
+        .run(tailLines(transcript, LIVE_TRANSCRIPT_TAIL), now, id);
+    } catch {
+      /* 偶发 SQLITE_BUSY / 写失败：保留上次预览，下个 tick 再试 */
+    }
   }
 
   /** Running rows with no activity (updatedAt) for >= thresholdMs — candidates for stuck reaping. */
@@ -121,6 +191,7 @@ export class SubAgentRegistry {
   /** Delete a record. The main agent controls lifecycle — sub-agents are not auto-destroyed. */
   remove(id: string): boolean {
     const info = this.database.prepare("DELETE FROM subagents WHERE id=?").run(id);
+    this.lastProgressAt.delete(id);
     return Number(info.changes) > 0;
   }
 

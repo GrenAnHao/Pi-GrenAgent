@@ -6,33 +6,19 @@ import { Type } from "typebox";
 import { spawnPiAgent } from "./runner.js";
 import { normalizeTasks, spawnHasWork } from "./tasks.js";
 import { getApprovalPolicy } from "../_shared/approval.js";
-import { sandboxAvailable } from "../_shared/sandbox-gate.js";
 import { resolveProfile, profileToModel, profileToEnv, profileLimits, type ProfileInput } from "./capability.js";
 import { discoverAgents, resolveAgent, suggestAgent, withBuiltinDefaults, type AgentScope } from "./agents.js";
 import { createWorktree, worktreeDiff } from "./worktree.js";
 import { SubAgentRegistry, type SubAgentRow } from "./registry.js";
 import { cancelSubAgent, installCancelWatcher } from "./cancel.js";
 import { getConfig } from "../_shared/runtime-config.js";
+import { tailLines, LIVE_TRANSCRIPT_TAIL, TRANSCRIPT_CAP } from "./transcript-tail.js";
 import { registerWorkflows } from "./workflows.js";
 import { join } from "node:path";
 import { existsSync, readdirSync } from "node:fs";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 
 const MAX_CONCURRENCY = 4;
-
-// 子代理 `--mode json` 的 stdout 随消息呈 O(n^2) 膨胀。运行中若把全量 transcript 每帧经 IPC
-// 推给前端，会压垮 IPC 反序列化 + state 存储（卡爆/OOM）。故运行中只推尾部定长片段供实时预览，
-// 完整 transcript 仅终态返回一次；终态也设上限，防极端超大串写进 session 后重开历史再次卡爆。
-const LIVE_TRANSCRIPT_TAIL = 65536; // 运行中实时预览 transcript 尾部上限（字符）
-const TRANSCRIPT_CAP = 4_000_000; // 终态完整 transcript 上限（字符）
-
-/** 取尾部至多 maxLen 字符，并丢弃因截断产生的首个半行，保持 JSONL 行完整。 */
-function tailLines(s: string, maxLen: number): string {
-  if (s.length <= maxLen) return s;
-  const cut = s.slice(s.length - maxLen);
-  const nl = cut.indexOf("\n");
-  return nl >= 0 ? cut.slice(nl + 1) : cut;
-}
 
 // Background sub-agent control plane (pull model): one sqlite registry + a map of
 // in-flight AbortControllers per cwd. Lives across tool calls inside the long-lived
@@ -198,7 +184,7 @@ export default function (pi: ExtensionAPI) {
                 mcp: Type.Optional(Type.Union([Type.Boolean(), Type.Array(Type.String())])),
                 spawn: Type.Optional(Type.Boolean()),
                 isolation: Type.Optional(
-                  Type.Union([Type.Literal("process"), Type.Literal("worktree"), Type.Literal("sandbox")]),
+                  Type.Union([Type.Literal("process"), Type.Literal("worktree")]),
                 ),
                 model: Type.Optional(Type.String()),
               },
@@ -311,10 +297,6 @@ export default function (pi: ExtensionAPI) {
       }
 
       const profile = resolveProfile(params.profile as ProfileInput | undefined);
-      const wantSandbox = profile.isolation === "sandbox";
-      if (wantSandbox && (hasChain || list.length !== 1)) {
-        throw new Error("sandbox 隔离仅支持单任务（不支持并行 tasks / chain）");
-      }
       const wantWorktree = profile.isolation === "worktree";
       // chain has its own worktree guard below; only the single/parallel path is gated here.
       if (wantWorktree && !hasChain && list.length !== 1) {
@@ -323,21 +305,12 @@ export default function (pi: ExtensionAPI) {
       const profileModel = profileToModel(profile, getConfig);
       const profileEnv: Record<string, string> = params.profile ? profileToEnv(profile) : {};
       // 子代理继承 owner 审批策略，但把 `full` 下调为 `auto`：自主 spawn 的子代理对用户可见性低，
-      // 不应连 safety 的危险命令确认 / 受保护路径拦截（⑤）都跳过。能力硬限（① readonly/deny）与
+      // 不应连 safety 的危险命令确认 / 受保护路径拦截（④）都跳过。能力硬限（① readonly/deny）与
       // owner 自身会话不受影响——这里只收紧"模型自动起的子代理"。headless 下 ask 仍在 safety 内
       // 降级为 auto 行为（不全拦），故 auto 是安全且足够的下限。
       const ownerPolicy = getApprovalPolicy();
       profileEnv.APPROVAL_POLICY = ownerPolicy === "full" ? "auto" : ownerPolicy;
       const limits = profileLimits(profile);
-      // sandbox 档：可用则让子代理 code-exec/sandbox_sh 走 WSL2 沙箱（safety 禁内置 bash）；
-      // 不可用则回退 process 隔离（profileEnv 的 deny/readonly 仍生效），并标记 isolationDowngraded
-      // 在结果里告知调用方/用户隔离强度被降级，而非误以为仍在 sandbox 内执行。
-      let isolationDowngraded = false;
-      if (wantSandbox) {
-        if (await sandboxAvailable()) profileEnv.SANDBOX_ENABLE = "on";
-        else isolationDowngraded = true;
-      }
-      const downgradeNote = "\n\n---\n注意：请求了 sandbox 隔离，但当前环境不可用（WSL2 未就绪），已回退到进程隔离执行。";
 
       // Named-agent resolution (markdown agents in ~/.pi/agent/agents + .pi/agents).
       // A named agent contributes its system prompt + tool allowlist + model.
@@ -453,18 +426,21 @@ export default function (pi: ExtensionAPI) {
           mcp: profile.mcp,
           timeoutMs: limits.timeoutMs,
           signal: controller.signal,
-          onUpdate: () => registry.touch(id), // heartbeat → stuck detection
+          // 增量写 transcript（progress 内部也 bump updatedAt，保留 stuck detection 心跳）→ 右坞
+          // SubAgentLogBody 轮询 registry 即可像主对话一样实时回放后台子代理（与 dream/distill 一致）。
+          onUpdate: (u) => registry.progress(id, u.transcript),
         })
           .then((r) =>
             registry.finish(
               id,
               r.ok
-                ? { status: "done", output: r.output, exitCode: r.exitCode }
+                ? { status: "done", output: r.output, exitCode: r.exitCode, transcript: r.transcript }
                 : {
                     status: controller.signal.aborted ? "cancelled" : "error",
                     output: r.output,
                     error: r.error,
                     exitCode: r.exitCode,
+                    transcript: r.transcript,
                   },
             ),
           )
@@ -474,12 +450,10 @@ export default function (pi: ExtensionAPI) {
           content: [
             {
               type: "text",
-              text:
-                `Background sub-agent started. agentId: ${id}\nUse spawn_agent({ action: "wait", agentId: "${id}" }) to await, or "status" / "cancel".` +
-                (isolationDowngraded ? downgradeNote : ""),
+              text: `Background sub-agent started. agentId: ${id}\nUse spawn_agent({ action: "wait", agentId: "${id}" }) to await, or "status" / "cancel".`,
             },
           ],
-          details: { agentId: id, status: "running", ...(isolationDowngraded ? { isolationDowngraded: true } : {}) },
+          details: { agentId: id, status: "running" },
         };
       }
 
@@ -511,7 +485,9 @@ export default function (pi: ExtensionAPI) {
             timeoutMs: limits.timeoutMs,
             signal: controller.signal,
             onUpdate: (u) => {
-              registry.touch(id); // heartbeat → stuck detection
+              // 写 transcript（registry 内部截断；progress 也 bump updatedAt → 保留 stuck detection 心跳）：
+              // 让从 Bot 菜单点开「运行中的前台单任务」也能像主对话内联一样实时回放（兜底视图读 registry）。
+              registry.progress(id, u.transcript);
               if (onUpdate) {
                 onUpdate({
                   content: [{ type: "text", text: u.text }],
@@ -529,12 +505,11 @@ export default function (pi: ExtensionAPI) {
               output: r.output,
               error: r.error,
               exitCode: r.exitCode,
+              transcript: r.transcript,
             });
             // 超时被杀但已产出实质内容：保留「已写部分」返回（附截断说明），而不是抛错把成果丢掉。
             if (!aborted && r.partial && r.output.trim()) {
-              const partialText =
-                `${r.output}\n\n_(超时截断：${r.error ?? "timeout"}；以上为已产出部分)_` +
-                (isolationDowngraded ? downgradeNote : "");
+              const partialText = `${r.output}\n\n_(超时截断：${r.error ?? "timeout"}；以上为已产出部分)_`;
               return {
                 content: [{ type: "text", text: partialText }],
                 details: {
@@ -542,18 +517,16 @@ export default function (pi: ExtensionAPI) {
                   exitCode: r.exitCode,
                   partial: true,
                   transcript: tailLines(r.transcript, TRANSCRIPT_CAP),
-                  ...(isolationDowngraded ? { isolationDowngraded: true } : {}),
                 },
               };
             }
             throw new Error(`sub-agent failed (exit ${r.exitCode}): ${r.error ?? "unknown error"}`);
           }
           const diff = wt ? await worktreeDiff(wt.dir) : undefined;
-          registry.finish(id, { status: "done", output: r.output, exitCode: r.exitCode });
-          const baseText = wt
+          registry.finish(id, { status: "done", output: r.output, exitCode: r.exitCode, transcript: r.transcript });
+          const text = wt
             ? `${r.output || "(no output)"}\n\n---\n### Diff (isolated worktree)\n\n${diff?.trim() ? "```diff\n" + diff + "\n```" : "(no file changes)"}`
             : r.output || "(no output)";
-          const text = isolationDowngraded ? baseText + downgradeNote : baseText;
           return {
             content: [{ type: "text", text }],
             details: {
@@ -562,7 +535,6 @@ export default function (pi: ExtensionAPI) {
               transcript: tailLines(r.transcript, TRANSCRIPT_CAP),
               isolated: !!wt,
               diff,
-              ...(isolationDowngraded ? { isolationDowngraded: true } : {}),
             },
           };
         } finally {

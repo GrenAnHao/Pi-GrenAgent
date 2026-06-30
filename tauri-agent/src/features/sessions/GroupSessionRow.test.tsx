@@ -21,6 +21,7 @@ describe('GroupSessionRow', () => {
         onSubmitRename={vi.fn()}
         onRequestRename={vi.fn()}
         onPinToggle={vi.fn()}
+        onReveal={vi.fn()}
       />,
     );
     fireEvent.click(screen.getByText('组会话甲'));
@@ -41,6 +42,7 @@ describe('GroupSessionRow', () => {
         onSubmitRename={vi.fn()}
         onRequestRename={vi.fn()}
         onPinToggle={vi.fn()}
+        onReveal={vi.fn()}
       />,
     );
     expect(screen.getByText('新对话')).toBeTruthy();

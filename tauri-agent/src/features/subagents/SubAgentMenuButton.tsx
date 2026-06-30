@@ -155,12 +155,14 @@ export function SubAgentMenuButton() {
         useLayoutStore.getState().setRightPanelOpen(true);
         return;
       }
-      // 兜底：跨会话 / 后台 spawn，用 registry 的最终 output 文本打开简版会话。
+      // 兜底：跨会话 / 后台 spawn（主对话里没有对应 spawn_agent 消息）。带上 registry 的 transcript，
+      // 面板即可像主对话一样实时回放完整工具调用+文本流；无 transcript（旧数据）时退回纯 output 文本。
       useDockStore.getState().openSubAgentLog({
         agentId: item.id,
         task: item.task,
         output: item.output ?? '',
         status: mapSubAgentStatus(item.status),
+        transcript: item.transcript ?? undefined,
       });
     },
     [store],

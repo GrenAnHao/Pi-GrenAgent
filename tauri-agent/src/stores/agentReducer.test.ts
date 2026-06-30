@@ -130,18 +130,103 @@ describe('applyEvent', () => {
     expect(text(last)).toBe('hi there');
   });
 
-  it('message_end drops assistant messages with only tool calls (no visible text)', () => {
+  it('message_end drops the empty assistant bubble for tool-only messages but keeps the tool card', () => {
     let s = initialAgentState();
     s = applyEvent(s, {
       type: 'message_start',
       message: { role: 'assistant', content: [{ type: 'toolCall', id: 'c1', name: 'bash' }] },
     } as AgentEvent);
-    expect(s.messages).toHaveLength(1);
+    // 流式即建卡：一条 assistant 空泡 + 一张 running 工具卡片
+    expect(s.messages.filter((m) => m.kind === 'tool')).toHaveLength(1);
     s = applyEvent(s, {
       type: 'message_end',
       message: { role: 'assistant', content: [{ type: 'toolCall', id: 'c1', name: 'bash' }] },
     } as AgentEvent);
-    expect(s.messages).toHaveLength(0);
+    // 空 assistant 泡被移除，但工具卡片保留（仍 running，等待 tool_execution_*）
+    expect(s.messages).toHaveLength(1);
+    const only = s.messages[0];
+    expect(only.kind).toBe('tool');
+    if (only.kind === 'tool') {
+      expect(only.toolCallId).toBe('c1');
+      expect(only.status).toBe('running');
+    }
+  });
+
+  it('shows a running tool card while toolCall args stream in (before tool_execution_start)', () => {
+    let s = initialAgentState();
+    s = applyEvent(s, { type: 'agent_start' } as AgentEvent);
+    s = applyEvent(s, { type: 'message_start', message: { role: 'assistant', content: [] } } as AgentEvent);
+
+    const w1 = () => s.messages.find((m) => m.kind === 'tool' && m.toolCallId === 'w1');
+    const contentOf = (m: ChatMessage | undefined): string =>
+      m && m.kind === 'tool' ? ((m.args as { content?: string }).content ?? '') : '';
+    const statusOf = (m: ChatMessage | undefined): string => (m && m.kind === 'tool' ? m.status : '');
+
+    // 模型开始生成 Write 调用，content 仍在逐 token 流入（参数未写完）
+    s = applyEvent(s, {
+      type: 'message_update',
+      message: {
+        role: 'assistant',
+        content: [{ type: 'toolCall', id: 'w1', name: 'write', arguments: { path: 'a.ts', content: 'export ' } }],
+      },
+      assistantMessageEvent: { type: 'text_delta', delta: '' },
+    } as AgentEvent);
+    expect(statusOf(w1())).toBe('running');
+    expect(contentOf(w1())).toBe('export ');
+
+    // 参数继续增长：同一张卡片刷新，不新增第二张
+    s = applyEvent(s, {
+      type: 'message_update',
+      message: {
+        role: 'assistant',
+        content: [{ type: 'toolCall', id: 'w1', name: 'write', arguments: { path: 'a.ts', content: 'export const x = 1;' } }],
+      },
+      assistantMessageEvent: { type: 'text_delta', delta: '' },
+    } as AgentEvent);
+    expect(s.messages.filter((m) => m.kind === 'tool' && m.toolCallId === 'w1')).toHaveLength(1);
+    expect(contentOf(w1())).toBe('export const x = 1;');
+
+    // 真正开始执行：复用同卡（仍只有一张），用执行时的完整参数覆盖
+    s = applyEvent(s, {
+      type: 'tool_execution_start',
+      toolCallId: 'w1',
+      toolName: 'write',
+      args: { path: 'a.ts', content: 'export const x = 1;' },
+    } as AgentEvent);
+    expect(s.messages.filter((m) => m.kind === 'tool' && m.toolCallId === 'w1')).toHaveLength(1);
+
+    // 执行结束 → done
+    s = applyEvent(s, {
+      type: 'tool_execution_end',
+      toolCallId: 'w1',
+      toolName: 'write',
+      result: { content: [] },
+      isError: false,
+    } as AgentEvent);
+    expect(statusOf(w1())).toBe('done');
+  });
+
+  it('messagesFromTranscript shows a running tool card while a tool call is still streaming', () => {
+    // 子代理对话与主对话共用同一 reducer：运行中回放（transcript 尾部尚无 tool_execution_end）
+    // 也应在参数流式阶段就呈现 running 卡片。
+    const transcript = [
+      JSON.stringify({ type: 'message_start', message: { role: 'assistant', content: [] } }),
+      JSON.stringify({
+        type: 'message_update',
+        message: {
+          role: 'assistant',
+          content: [{ type: 'toolCall', id: 't1', name: 'write', arguments: { path: 'a.ts', content: 'partial' } }],
+        },
+        assistantMessageEvent: { type: 'text_delta', delta: '' },
+      }),
+    ].join('\n');
+    const msgs = messagesFromTranscript(transcript);
+    const tool = msgs.find((m) => m.kind === 'tool');
+    expect(tool?.kind).toBe('tool');
+    if (tool?.kind === 'tool') {
+      expect(tool.toolName).toBe('write');
+      expect(tool.status).toBe('running');
+    }
   });
 
   it('message_end surfaces assistant errorMessage as lastError when content is empty', () => {

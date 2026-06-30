@@ -76,6 +76,9 @@ function ContextBar({ ctx, bar, menu, store }: MessageActionBarProps & { store: 
   const notify = useNotify();
   const ts = ctx.timestamp as number; // 外层已保证 != null
   const excluded = store.useStore((s) => s.excluded.has(ts));
+  // 流式进行中（整段 agent run 未结束）隐藏悬浮操作栏：回退(fork)/移出上下文等会改写会话树的动作
+  // 若在进行中的回合里触发，会与在跑的回合抢状态、产生竞态——此时不该出现这些工具（回合结束即恢复）。
+  const isStreaming = store.useStore((s) => s.isStreaming);
   const enriched = useMemo<MessageActionContext>(
     () => ({
       ...ctx,
@@ -105,6 +108,7 @@ function ContextBar({ ctx, bar, menu, store }: MessageActionBarProps & { store: 
     }),
     [ctx, excluded, store, notify],
   );
+  if (isStreaming) return null;
   return renderActions(enriched, bar, menu, notify);
 }
 

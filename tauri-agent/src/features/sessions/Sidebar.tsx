@@ -186,6 +186,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
               onPinToggle={togglePinnedConversation}
               onSubmitRename={handleSubmitRename}
               onRequestRename={handleRequestRename}
+              onReveal={handleRevealProject}
             />
           );
         case 'pinned-label':
@@ -218,6 +219,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
               onSubmitRename={handleSubmitRename}
               onRequestRename={handleRequestRename}
               onPinToggle={togglePinnedSession}
+              onReveal={handleRevealProject}
             />
           );
         case 'more':

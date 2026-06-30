@@ -63,10 +63,25 @@ impl PiClient {
                         return;
                     }
                 }
-                self.sink.emit_event(
-                    &self.workspace,
-                    &serde_json::to_value(UnmatchedResponse::from(resp)).unwrap_or(Value::Null),
-                );
+                // 没有等待者的响应（id 缺失 / pending 已被 abort 迟到取代 / 重复响应）是协议层竞态，
+                // 对前端没有可操作价值。此前会被转成 `unmatched_response` 事件 emit 给前端，命中
+                // agentReducer 的 default 兜底分支写入 lastError；当它在 `agent_start`（清空 lastError）
+                // 之前到达、且与之跨动画帧时，就表现为「发送对话时红色错误条瞬间弹闪一下又消失」。
+                // 改为仅记录诊断日志、不再 emit 事件，从源头消除该闪现。真正的失败仍走各自专门路径：
+                // 命令失败 → 匹配 pending 的响应 Err（调用方 try/catch）；模型/扩展/重试失败 → agent
+                // 事件流（message_end.errorMessage / extension_error / auto_retry_end.finalError）。
+                let success = resp.success;
+                let command = resp.command;
+                match resp.error {
+                    Some(err) => forward_log(&format!(
+                        "[pi:{}] dropped unmatched response (command={command}, success={success}): {err}",
+                        self.workspace
+                    )),
+                    None => forward_log(&format!(
+                        "[pi:{}] dropped unmatched response (command={command}, success={success})",
+                        self.workspace
+                    )),
+                }
             }
             Ok(PiInbound::ExtensionUiRequest(req)) => {
                 let v = serde_json::to_value(&req).unwrap_or(Value::Null);
@@ -113,27 +128,6 @@ impl PiClient {
     pub async fn respond_ui(&self, response: Value) -> Result<()> {
         let line = serde_json::to_string(&response)?;
         self.transport.write_line(line).await
-    }
-}
-
-#[derive(serde::Serialize)]
-struct UnmatchedResponse {
-    #[serde(rename = "type")]
-    ty: &'static str,
-    command: String,
-    success: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    error: Option<String>,
-}
-
-impl From<RpcResponse> for UnmatchedResponse {
-    fn from(r: RpcResponse) -> Self {
-        Self {
-            ty: "unmatched_response",
-            command: r.command,
-            success: r.success,
-            error: r.error,
-        }
     }
 }
 
@@ -265,22 +259,21 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn unmatched_response_is_emitted_as_event() {
+    async fn unmatched_response_is_dropped_not_emitted() {
         let (transport, _outbox) = ChannelTransport::new();
         let sink = CollectingSink::default();
         let client = PiClient::new("ws1".into(), Arc::new(transport), Arc::new(sink.clone()));
 
-        // 没有对应 pending 的响应（id 未注册）
+        // 没有对应 pending 的响应（id 未注册）：是协议层竞态，仅记日志、不 emit 事件，
+        // 避免命中前端 reducer 兜底写 lastError 而闪现错误条。
         client
             .handle_line(r#"{"id":"ghost","type":"response","command":"get_state","success":false,"error":"boom"}"#)
             .await;
 
-        let events = sink.events.lock().unwrap();
-        assert_eq!(events.len(), 1);
-        assert_eq!(events[0]["type"], "unmatched_response");
-        assert_eq!(events[0]["command"], "get_state");
-        assert_eq!(events[0]["success"], false);
-        assert_eq!(events[0]["error"], "boom");
+        // 既不 emit 事件，也不误转成 UI 请求 / 退出。
+        assert!(sink.events.lock().unwrap().is_empty());
+        assert!(sink.ui_requests.lock().unwrap().is_empty());
+        assert!(sink.exits.lock().unwrap().is_empty());
     }
 
     #[tokio::test]

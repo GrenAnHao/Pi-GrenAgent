@@ -32,12 +32,14 @@ export interface SubAgentPayload {
   subIndex?: number | null;
 }
 
-/** registry 后端子代理（无对应主对话消息时的兜底视图，仅有最终 output 文本）。 */
+/** registry 后端子代理（无对应主对话消息时的兜底视图）。有 transcript 时实时回放完整工具调用+文本流，否则退回 output 文本。 */
 export interface SubAgentLogPayload {
   agentId: string;
   task: string;
   output: string;
   status: 'running' | 'done' | 'error';
+  /** 原始 JSONL transcript（registry 运行期增量写入）；缺省时面板退回纯 output 文本。 */
+  transcript?: string;
 }
 
 export type DockTabPayload = TerminalPayload | PagePayload | SubAgentPayload | SubAgentLogPayload;

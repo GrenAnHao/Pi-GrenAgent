@@ -5,7 +5,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-// Windows-safe flags mirroring extensions/checkpoint/snapshot.ts.
+// Windows-safe git flags (autocrlf off so snapshots are byte-faithful; long paths + quotepath off).
 const FLAGS = ["-c", "core.autocrlf=false", "-c", "core.longpaths=true", "-c", "core.quotepath=false"];
 
 export interface Worktree {

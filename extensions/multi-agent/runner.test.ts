@@ -90,7 +90,6 @@ describe("preset → injected sub-agent restrictions (end-to-end contract)", () 
       "hl_edit",
       "py_run",
       "js_run",
-      "sandbox_sh",
       "dap_launch",
       "dap_evaluate",
       "spawn_agent",

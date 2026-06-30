@@ -152,6 +152,53 @@ function registerToolCalls(pending: Map<string, PendingToolCall>, msg: AgentMess
   }
 }
 
+/**
+ * 把一条 assistant 消息里携带的 toolCall 块同步成 running 工具卡片（按 toolCallId upsert）：
+ * 命中已存在卡片则刷新参数（仅当仍 running，不回写已完成卡片），否则新建一张 running 卡片。
+ *
+ * 这是「Write/Edit 等工具看起来卡住、写完才显示」的修复点：tool_execution_start 要等模型把整段
+ * 参数（尤其 Write 的 content）流式生成完、真正开始执行时才发；而每个 message_update 都带「截至
+ * 当前的完整 assistant 消息」，其 content 里的 toolCall 块参数随流式逐渐补全 —— 据此在参数生成
+ * 阶段就把卡片立起来并实时刷新（模型一边写、卡片一边长），不再等到执行结束才整条蹦出来。
+ * 后端若未流式下发 toolCall 也无副作用：届时 message_* 取不到 toolCall 块，退回由
+ * tool_execution_start 建卡的旧路径。
+ */
+function syncStreamingToolCalls(messages: ChatMessage[], msg: AgentMessage): ChatMessage[] {
+  const calls = extractToolCalls(msg);
+  if (calls.length === 0) return messages;
+  let next = messages;
+  let cloned = false;
+  const ensureCloned = () => {
+    if (!cloned) {
+      next = [...next];
+      cloned = true;
+    }
+  };
+  for (const call of calls) {
+    const idx = next.findIndex((m) => m.kind === 'tool' && m.toolCallId === call.id);
+    if (idx === -1) {
+      ensureCloned();
+      next.push({
+        kind: 'tool',
+        id: nextId(),
+        toolCallId: call.id,
+        toolName: call.toolName,
+        args: call.args,
+        result: undefined,
+        status: 'running',
+      });
+      continue;
+    }
+    const cur = next[idx];
+    // 已 done/error 的卡片是终态（tool_execution_end 才是参数/结果的权威来源），流式快照不回写。
+    if (cur.kind === 'tool' && cur.status === 'running') {
+      ensureCloned();
+      next[idx] = { ...cur, toolName: call.toolName || cur.toolName, args: call.args };
+    }
+  }
+  return next;
+}
+
 /** 把 pi toolResult 消息还原成与 tool_execution_end 一致的 result 形状。 */
 function toolResultPayload(msg: AgentMessage): unknown {
   const raw = msg as { content?: unknown; details?: unknown };
@@ -222,23 +269,19 @@ export function applyEvent(state: AgentState, event: AgentEvent): AgentState {
           timestamp: messageTimestamp(ev.message) ?? cur.timestamp,
           ...thinkingTiming(cur, nextThinking, nextText),
         };
-        return { ...state, messages };
+      } else {
+        messages.push({
+          kind: 'assistant',
+          id: nextId(),
+          text,
+          thinking,
+          streaming: true,
+          timestamp: messageTimestamp(ev.message),
+          ...thinkingTiming({}, thinking, text),
+        });
       }
-      return {
-        ...state,
-        messages: [
-          ...messages,
-          {
-            kind: 'assistant',
-            id: nextId(),
-            text,
-            thinking,
-            streaming: true,
-            timestamp: messageTimestamp(ev.message),
-            ...thinkingTiming({}, thinking, text),
-          },
-        ],
-      };
+      // 模型可能在首帧就带上 toolCall 块（或一次性返回）：同步成 running 卡片，与流式路径一致。
+      return { ...state, messages: syncStreamingToolCalls(messages, ev.message) };
     }
 
     case 'message_end': {
@@ -252,43 +295,41 @@ export function applyEvent(state: AgentState, event: AgentEvent): AgentState {
       // 用户主动中断期间，abort 触发的 errorMessage 不弹红条（aborting 由 ChatView 置位）。
       const showErr = errMsg && !state.aborting ? errMsg : undefined;
       if (idx < 0) {
-        if (!text && !thinking) {
-          return showErr ? { ...state, lastError: showErr } : state;
+        // 无在流的 assistant 泡：有可见文本/思考才补一条终态 assistant；纯 toolCall（无文本/思考）
+        // 不建空泡，由下方 syncStreamingToolCalls 兜底把卡片立住，避免多条灰线。
+        if (text || thinking) {
+          messages.push({
+            kind: 'assistant',
+            id: nextId(),
+            text,
+            thinking,
+            streaming: false,
+            timestamp: messageTimestamp(ev.message),
+            ...thinkingTiming({}, thinking, text, true),
+          });
         }
-        return {
-          ...state,
-          ...(showErr ? { lastError: showErr } : {}),
-          messages: [
-            ...messages,
-            {
-              kind: 'assistant',
-              id: nextId(),
-              text,
-              thinking,
-              streaming: false,
-              timestamp: messageTimestamp(ev.message),
-              ...thinkingTiming({}, thinking, text, true),
-            },
-          ],
-        };
-      }
-      const cur = messages[idx] as Extract<ChatMessage, { kind: 'assistant' }>;
-      // 终态消息可能不含 thinking 块（推理只在流式 delta 里给），保留流式累积的 thinking，避免完成后丢失。
-      const finalThinking = thinking || cur.thinking;
-      // 仅含 tool call、无可见文本/思考的 assistant 消息不展示（否则会叠成多条灰线）
-      if (!text && !finalThinking) {
-        messages.splice(idx, 1);
       } else {
-        messages[idx] = {
-          ...cur,
-          text,
-          thinking: finalThinking,
-          streaming: false,
-          timestamp: messageTimestamp(ev.message) ?? cur.timestamp,
-          ...thinkingTiming(cur, finalThinking, text, true),
-        };
+        const cur = messages[idx] as Extract<ChatMessage, { kind: 'assistant' }>;
+        // 终态消息可能不含 thinking 块（推理只在流式 delta 里给），保留流式累积的 thinking，避免完成后丢失。
+        const finalThinking = thinking || cur.thinking;
+        // 仅含 tool call、无可见文本/思考的 assistant 消息不展示（否则会叠成多条灰线）
+        if (!text && !finalThinking) {
+          messages.splice(idx, 1);
+        } else {
+          messages[idx] = {
+            ...cur,
+            text,
+            thinking: finalThinking,
+            streaming: false,
+            timestamp: messageTimestamp(ev.message) ?? cur.timestamp,
+            ...thinkingTiming(cur, finalThinking, text, true),
+          };
+        }
       }
-      return showErr ? { ...state, messages, lastError: showErr } : { ...state, messages };
+      // 终态再 upsert 一次 toolCall：覆盖后端「只在 message_end 给完整 toolCall、不流式」的情况，
+      // 让卡片即使没走流式也能在 tool_execution_start 之前带完整参数立住。
+      const synced = syncStreamingToolCalls(messages, ev.message);
+      return showErr ? { ...state, messages: synced, lastError: showErr } : { ...state, messages: synced };
     }
 
     case 'message_update': {
@@ -323,11 +364,26 @@ export function applyEvent(state: AgentState, event: AgentEvent): AgentState {
           ...thinkingTiming({}, nextThinking, text),
         });
       }
-      return { ...state, messages };
+      // 解析 content 里随流式渐全的 toolCall 块 → 在工具参数生成阶段就把 running 卡片立起来，
+      // 不再等 tool_execution_start（参数已写完、开始执行）才整条蹦出来。
+      return { ...state, messages: syncStreamingToolCalls(messages, ev.message) };
     }
 
     case 'tool_execution_start': {
       const ev = event as Extract<AgentEvent, { type: 'tool_execution_start' }>;
+      // 流式阶段 message_update 可能已据 toolCall 块建好这张卡片：命中则复用并用执行时的权威完整
+      // 参数覆盖（避免重复出现两张卡片）；未命中（后端未流式下发 toolCall）则新建。
+      const existing = state.messages.findIndex(
+        (m) => m.kind === 'tool' && m.toolCallId === ev.toolCallId,
+      );
+      if (existing >= 0) {
+        const cur = state.messages[existing];
+        if (cur.kind === 'tool') {
+          const messages = [...state.messages];
+          messages[existing] = { ...cur, toolName: ev.toolName, args: ev.args, status: 'running' };
+          return { ...state, messages };
+        }
+      }
       return {
         ...state,
         messages: [
@@ -385,13 +441,20 @@ export function applyEvent(state: AgentState, event: AgentEvent): AgentState {
     }
 
     default: {
-      // 兜底：捕获未显式建模、但带 string error 字段的错误事件，避免失败被静默吞掉。
-      // 注意：不在此处设 isStreaming:false——流尚未结束（agent_end 还没到），提前停流会让
-      // awaitStreamingEnd 提前 resolve，导致 runOnce 误判失败并闪现错误 banner。
+      // 兜底：未显式建模、却带 string error 字段的事件。
+      // 这类事件大多是协议层噪声 / 良性竞态（典型如后端对「无人等待的 RPC 响应」兜底转发的
+      // unmatched_response：abort 后迟到、重复、或 id 已被取代的响应），对用户没有可操作价值。
+      // 它们常在 agent_start（清空 lastError）之前到达、又与之跨动画帧，于是表现为「发送对话时
+      // 红色错误条瞬间弹闪一下又消失」。真正的失败都有专门承载路径，不依赖这里兜底：
+      //   - 命令失败 → 匹配 pending 的响应 Err，由各 caller 的 try/catch 处理；
+      //   - 模型/供应商失败 → message_end 的 errorMessage（见上方 case）；
+      //   - 扩展失败 → extension_error；自动重试最终失败 → auto_retry_end.finalError。
+      // 因此这里不再把 error 写入 lastError（避免误弹/闪现）；后端 client.rs 也已对 unmatched
+      // 响应改为只记日志、不再 emit，此处仅作双保险。abort 进行中仍按中断语义停流。
       const maybeError = (event as { error?: unknown }).error;
       if (typeof maybeError === 'string' && maybeError.trim()) {
         if (state.aborting) return { ...state, isStreaming: false };
-        return { ...state, lastError: maybeError };
+        return state;
       }
       return state;
     }

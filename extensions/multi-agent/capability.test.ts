@@ -35,7 +35,7 @@ describe("resolveProfile", () => {
   });
   it("every preset is self-consistent (process isolation by default in P0)", () => {
     for (const name of Object.keys(PRESETS)) {
-      expect(["process", "worktree", "sandbox"]).toContain(PRESETS[name].isolation);
+      expect(["process", "worktree"]).toContain(PRESETS[name].isolation);
     }
   });
 });
@@ -91,7 +91,7 @@ describe("profileToEnv", () => {
   });
   it("restricted fs denies bypass writers + code-exec tools", () => {
     const ro = (profileToEnv({ fs: "readonly" }).SAFETY_DENY_TOOLS ?? "").split(",");
-    for (const t of ["ast_edit", "hl_edit", "py_run", "js_run", "sandbox_sh", "dap_launch", "dap_evaluate"]) {
+    for (const t of ["ast_edit", "hl_edit", "py_run", "js_run", "dap_launch", "dap_evaluate"]) {
       expect(ro).toContain(t);
     }
     // writeAllow（仅允许某些前缀）同样视为受限 fs，照样禁绕过工具。

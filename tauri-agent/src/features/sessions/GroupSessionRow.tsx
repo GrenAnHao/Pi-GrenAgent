@@ -14,6 +14,7 @@ interface GroupSessionRowProps {
   onSubmitRename: (cwd: string, path: string, name: string) => void;
   onRequestRename: (path: string) => void;
   onPinToggle: (path: string) => void;
+  onReveal: (cwd: string) => void;
 }
 
 export const GroupSessionRow = memo(function GroupSessionRow({
@@ -28,6 +29,7 @@ export const GroupSessionRow = memo(function GroupSessionRow({
   onSubmitRename,
   onRequestRename,
   onPinToggle,
+  onReveal,
 }: GroupSessionRowProps) {
   const path = session.path;
   const handleClick = useCallback(() => onOpen(cwd, path), [onOpen, cwd, path]);
@@ -35,6 +37,7 @@ export const GroupSessionRow = memo(function GroupSessionRow({
   const handleRename = useCallback((name: string) => onSubmitRename(cwd, path, name), [onSubmitRename, cwd, path]);
   const handleRequestRename = useCallback(() => onRequestRename(path), [onRequestRename, path]);
   const handlePinToggle = useCallback(() => onPinToggle(path), [onPinToggle, path]);
+  const handleReveal = useCallback(() => onReveal(cwd), [onReveal, cwd]);
 
   return (
     <SessionItem
@@ -48,6 +51,7 @@ export const GroupSessionRow = memo(function GroupSessionRow({
       onRequestRename={handleRequestRename}
       onRename={handleRename}
       onDelete={handleDelete}
+      onReveal={handleReveal}
     />
   );
 });

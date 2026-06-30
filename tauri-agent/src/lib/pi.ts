@@ -100,26 +100,6 @@ export interface MemHistoryItem {
   createdAt: number;
   scope: string;
 }
-export interface CpFile {
-  file: string;
-  status: string;
-}
-export interface CpItem {
-  id: string;
-  hash: string;
-  label: string;
-  kind: string;
-  files: CpFile[];
-  createdAt: number;
-}
-export interface ReviewNote {
-  id: string;
-  file: string;
-  line: number | null;
-  severity: string;
-  message: string;
-  createdAt: number;
-}
 export interface ImageItem {
   name: string;
   bytes: number;
@@ -158,6 +138,8 @@ export interface SubAgentItem {
   output?: string | null;
   error?: string | null;
   exitCode?: number | null;
+  /** 原始 `--mode json` JSONL transcript（运行期增量写入），前端据此实时回放子代理完整工具调用+文本流。 */
+  transcript?: string | null;
   createdAt: number;
   updatedAt: number;
 }
@@ -270,9 +252,6 @@ export const pi = {
   memList: (workspace: string) => invoke<MemItem[]>('mem_list', { workspace }),
   memHistory: (workspace: string, memoryId?: string) =>
     invoke<MemHistoryItem[]>('mem_history', { workspace, memoryId: memoryId ?? null }),
-  cpList: (workspace: string) => invoke<CpItem[]>('cp_list', { workspace }),
-  cpDiff: (workspace: string, id: string) => invoke<string>('cp_diff', { workspace, id }),
-  rvList: (workspace: string) => invoke<ReviewNote[]>('rv_list', { workspace }),
   createList: (workspace: string) => invoke<ImageItem[]>('create_list', { workspace }),
   createImage: (workspace: string, name: string) =>
     invoke<string>('create_image', { workspace, name }),
@@ -336,14 +315,3 @@ export function onPiUiRequest(handler: (e: PiUiRequestEnvelope) => void): Promis
 export function onPiExit(handler: (e: PiExitEnvelope) => void): Promise<UnlistenFn> {
   return listen<PiExitEnvelope>('pi://exit', (e) => handler(e.payload));
 }
-
-// 沙箱（WSL2 + @anthropic-ai/sandbox-runtime）就绪状态 + 引导安装。
-export interface SandboxStatus {
-  wsl: boolean;
-  distro?: string;
-  deps: boolean;
-  ready: boolean;
-}
-export const sandboxStatus = (): Promise<SandboxStatus> => invoke<SandboxStatus>('sandbox_status');
-export const sandboxInstall = (step: 'wsl' | 'deps'): Promise<string> =>
-  invoke<string>('sandbox_install', { step });

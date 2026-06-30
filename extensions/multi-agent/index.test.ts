@@ -1,8 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // index.ts 的 spawn_agent execute() 此前无单测。这里用最小 mock 隔离 fs / 子进程 / sqlite，
-// 覆盖两条会改运行时行为的逻辑：D（sandbox 不可用→结果标 isolationDowngraded）与
-// B（owner=full 时给自主子代理注入 APPROVAL_POLICY=auto，能力硬限不变）。
+// 覆盖 B（owner=full 时给自主子代理注入 APPROVAL_POLICY=auto，能力硬限不变）等运行时行为。
 vi.mock("./workflows.js", () => ({ registerWorkflows: () => {} }));
 vi.mock("./cancel.js", () => ({ installCancelWatcher: () => {}, cancelSubAgent: () => {} }));
 vi.mock("./worktree.js", () => ({ createWorktree: vi.fn(async () => null), worktreeDiff: vi.fn(async () => "") }));
@@ -38,13 +37,11 @@ vi.mock("./registry.js", () => {
 vi.mock("./runner.js", () => ({
   spawnPiAgent: vi.fn(async () => ({ ok: true, output: "done", exitCode: 0, transcript: "" })),
 }));
-vi.mock("../_shared/sandbox-gate.js", () => ({ sandboxAvailable: vi.fn(async () => false) }));
 vi.mock("../_shared/approval.js", () => ({ getApprovalPolicy: vi.fn(() => "auto") }));
 vi.mock("../_shared/runtime-config.js", () => ({ getConfig: vi.fn(() => undefined) }));
 
 import { getApprovalPolicy } from "../_shared/approval.js";
 import { getConfig } from "../_shared/runtime-config.js";
-import { sandboxAvailable } from "../_shared/sandbox-gate.js";
 import multiAgent from "./index.js";
 import { spawnPiAgent } from "./runner.js";
 
@@ -77,31 +74,9 @@ beforeEach(() => {
   // Hermetic: a stray PI_IS_SUBAGENT in the ambient env would trip the recursion guard.
   delete process.env.PI_IS_SUBAGENT;
   delete process.env.SAFETY_READONLY;
-  vi.mocked(sandboxAvailable).mockResolvedValue(false);
   vi.mocked(getApprovalPolicy).mockReturnValue("auto");
   // 默认不限单会话上限，避免无关的 spawn 行为测试因模块级累计计数被拦；上限专测在下方单独设值。
   vi.mocked(getConfig).mockImplementation((k: string) => (k === "SUBAGENT_MAX_PER_SESSION" ? "0" : undefined));
-});
-
-describe("spawn_agent · sandbox downgrade visibility (D)", () => {
-  it("marks isolationDowngraded when sandbox requested but unavailable", async () => {
-    vi.mocked(sandboxAvailable).mockResolvedValue(false);
-    const r = await loadSpawnAgent()("t1", { task: "do x", profile: { isolation: "sandbox" } }, null, null, ctx);
-    expect(r.details?.isolationDowngraded).toBe(true);
-    expect(r.content[0].text).toContain("回退到进程隔离");
-  });
-
-  it("does NOT mark downgrade when sandbox is available", async () => {
-    vi.mocked(sandboxAvailable).mockResolvedValue(true);
-    const r = await loadSpawnAgent()("t2", { task: "do x", profile: { isolation: "sandbox" } }, null, null, ctx);
-    expect(r.details?.isolationDowngraded).toBeUndefined();
-    expect(r.content[0].text).not.toContain("回退到进程隔离");
-  });
-
-  it("does NOT mark downgrade for a non-sandbox profile", async () => {
-    const r = await loadSpawnAgent()("t3", { task: "do x" }, null, null, ctx);
-    expect(r.details?.isolationDowngraded).toBeUndefined();
-  });
 });
 
 describe("spawn_agent · approval policy injected into sub-agent (B)", () => {

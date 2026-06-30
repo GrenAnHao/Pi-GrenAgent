@@ -17,8 +17,8 @@ export interface CapabilityProfile {
   mcp?: boolean | string[];
   /** Allow this sub-agent to itself spawn sub-agents. Reserved (P3 enforces). */
   spawn?: boolean;
-  /** Isolation tier: process（默认）/ worktree（隔离 git worktree，返回 diff）/ sandbox（WSL2 srt 隔离执行）。三者均已实现。 */
-  isolation?: "process" | "worktree" | "sandbox";
+  /** Isolation tier: process（默认）/ worktree（隔离 git worktree，返回 diff）。 */
+  isolation?: "process" | "worktree";
   /** Model: provider/id, or alias `cheap` / `strong` resolved via env. */
   model?: string;
   limits?: { timeoutMs?: number; maxConcurrency?: number; tokenBudget?: number };
@@ -101,7 +101,7 @@ export function profileToEnv(p: CapabilityProfile): Record<string, string> {
   const deny: string[] = [];
   // 受限文件能力（readonly / 仅允许某些前缀）时，连带禁掉「绕过写白名单」的写盘工具与代码执行工具：
   // 它们不经 safety 的 write/edit 路径检查（SAFETY_WRITE_ALLOW），否则 fs 隔离可被
-  // ast_edit/hl_edit/py_run/js_run/sandbox_sh/dap_* 绕过（如 reviewer/explore 子代理）。
+  // ast_edit/hl_edit/py_run/js_run/dap_* 绕过（如 reviewer/explore 子代理）。
   if (restrictedFs) deny.push(...WRITE_TOOLS, ...CODE_EXEC_TOOLS);
   if (p.net === false) deny.push(...NET_TOOLS);
   if (p.tools?.deny?.length) deny.push(...p.tools.deny);

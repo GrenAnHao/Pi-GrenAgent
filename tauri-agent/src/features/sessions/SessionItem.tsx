@@ -75,6 +75,7 @@ export interface SessionItemProps {
   onRequestRename: () => void;
   onRename: (name: string) => void;
   onDelete: () => void;
+  onReveal?: () => void;
 }
 
 export const SessionItem = memo(function SessionItem(props: SessionItemProps) {
@@ -90,6 +91,7 @@ export const SessionItem = memo(function SessionItem(props: SessionItemProps) {
     onRequestRename,
     onRename,
     onDelete,
+    onReveal,
   } = props;
   const [draft, setDraft] = useState(title);
   const [hovered, setHovered] = useState(false);
@@ -130,6 +132,7 @@ export const SessionItem = memo(function SessionItem(props: SessionItemProps) {
     onPinToggle,
     onRename: onRequestRename,
     onDelete,
+    onReveal,
   });
 
   return (

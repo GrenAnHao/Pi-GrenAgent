@@ -20,6 +20,8 @@ pub struct SubAgentItem {
     pub output: Option<String>,
     pub error: Option<String>,
     pub exit_code: Option<i64>,
+    /// 原始 `--mode json` JSONL transcript（运行期增量写入），前端据此实时回放子代理；旧库无该列时为 None。
+    pub transcript: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -54,12 +56,24 @@ fn read_subagent_list(path: &Path, limit: i64) -> Result<Vec<SubAgentItem>, Stri
     if exists == 0 {
         return Ok(vec![]);
     }
-    let mut stmt = conn
-        .prepare(
-            "SELECT id, task, status, model, output, error, exitCode, createdAt, updatedAt, profile \
-             FROM subagents ORDER BY createdAt DESC LIMIT ?1",
+    // 旧库（v1）可能没有 transcript 列：先探测，缺列时用 `NULL as transcript` 占位，
+    // 避免直接 SELECT transcript 触发 "no such column"（Rust 端只读，不负责迁移加列）。
+    let has_transcript = conn
+        .query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('subagents') WHERE name='transcript'",
+            [],
+            |r| r.get::<_, i64>(0),
         )
-        .map_err(|e| e.to_string())?;
+        .map(|c| c > 0)
+        .unwrap_or(false);
+    let sql = if has_transcript {
+        "SELECT id, task, status, model, output, error, exitCode, createdAt, updatedAt, profile, transcript \
+         FROM subagents ORDER BY createdAt DESC LIMIT ?1"
+    } else {
+        "SELECT id, task, status, model, output, error, exitCode, createdAt, updatedAt, profile, NULL as transcript \
+         FROM subagents ORDER BY createdAt DESC LIMIT ?1"
+    };
+    let mut stmt = conn.prepare(sql).map_err(|e| e.to_string())?;
     let rows = stmt
         .query_map([limit], |r| {
             Ok(SubAgentItem {
@@ -73,6 +87,7 @@ fn read_subagent_list(path: &Path, limit: i64) -> Result<Vec<SubAgentItem>, Stri
                 created_at: r.get(7)?,
                 updated_at: r.get(8)?,
                 profile: r.get(9)?,
+                transcript: r.get(10)?,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -221,6 +236,56 @@ mod tests {
         let raw = fs::read_to_string(&path).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(raw.trim()).unwrap();
         assert_eq!(parsed["agentId"], "sa-abc");
+        fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn list_includes_transcript_when_column_present() {
+        let dir = tmp_dir();
+        let db = dir.join("registry.db");
+        {
+            let conn = Connection::open(&db).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE subagents(
+                   id TEXT PRIMARY KEY,
+                   task TEXT NOT NULL,
+                   profile TEXT,
+                   model TEXT,
+                   status TEXT NOT NULL,
+                   output TEXT,
+                   error TEXT,
+                   exitCode INTEGER,
+                   transcript TEXT,
+                   createdAt INTEGER NOT NULL,
+                   updatedAt INTEGER NOT NULL
+                 );",
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO subagents(id,task,profile,model,status,output,error,exitCode,transcript,createdAt,updatedAt)
+                 VALUES('sa-t','t',NULL,NULL,'running',NULL,NULL,NULL,'{\"type\":\"message_update\"}',100,100)",
+                [],
+            )
+            .unwrap();
+        }
+        let list = read_subagent_list(&db, 50).unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(
+            list[0].transcript.as_deref(),
+            Some("{\"type\":\"message_update\"}")
+        );
+        fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn list_handles_legacy_db_without_transcript_column() {
+        // 旧库（无 transcript 列）走 `NULL as transcript` 分支：transcript 应为 None，不报 "no such column"。
+        let dir = tmp_dir();
+        let db = dir.join("registry.db");
+        make_registry(&db, &[("sa-old", "task", "done")]);
+        let list = read_subagent_list(&db, 50).unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].transcript, None);
         fs::remove_dir_all(dir).ok();
     }
 }

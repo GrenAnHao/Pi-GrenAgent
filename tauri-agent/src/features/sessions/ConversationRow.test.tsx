@@ -26,6 +26,7 @@ describe('ConversationRow', () => {
         onPinToggle={vi.fn()}
         onSubmitRename={vi.fn()}
         onRequestRename={vi.fn()}
+        onReveal={vi.fn()}
       />,
     );
     fireEvent.click(screen.getByText('会话甲'));
@@ -46,6 +47,7 @@ describe('ConversationRow', () => {
         onPinToggle={vi.fn()}
         onSubmitRename={onSubmitRename}
         onRequestRename={vi.fn()}
+        onReveal={vi.fn()}
       />,
     );
     const input = screen.getByTestId('session-rename-input') as HTMLInputElement;
