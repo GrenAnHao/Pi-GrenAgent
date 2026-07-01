@@ -55,7 +55,8 @@ const styles = createStaticStyles(({ css }) => ({
 }));
 
 interface OptionRowProps {
-  index: number;
+  /** 序号：字母（A/B/C）或数字，等宽显示。 */
+  index: number | string;
   label: string;
   selected: boolean;
   recommended?: boolean;

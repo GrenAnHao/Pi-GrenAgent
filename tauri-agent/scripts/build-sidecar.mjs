@@ -17,6 +17,8 @@ mkdirSync(binDir, { recursive: true });
 // 1) 安装 sidecar 依赖（@earendil-works/pi-coding-agent + typebox），bun 编译需要解析它们。
 console.log('Installing sidecar deps…');
 execSync('npm install', { cwd: sidecarRoot, stdio: 'inherit' });
+console.log('Patching pi shell resolution for Windows…');
+execSync('node scripts/patch-pi-shell.mjs', { cwd: sidecarRoot, stdio: 'inherit' });
 
 // extensions/*/index.ts 也 import 'typebox' 等；bun 从 ../extensions/*/ 解析这些 import，
 // 需在 extensions/ 也装好依赖，否则 bun build 报 "Could not resolve typebox"。

@@ -10,6 +10,7 @@ const { eventHandlers, piMock } = vi.hoisted(() => ({
     getMessages: vi.fn(
       (_ws: string): Promise<{ messages: unknown[] }> => Promise.resolve({ messages: [] }),
     ),
+    writeUiHistory: vi.fn((_ws: string, _key: string, _jsonl: string) => Promise.resolve()),
   },
 }));
 vi.mock('../lib/pi', () => ({
@@ -39,6 +40,7 @@ describe('createAgentStore', () => {
     piMock.restoreEntry.mockReset().mockResolvedValue(undefined);
     piMock.rewindTo.mockReset().mockResolvedValue(undefined);
     piMock.getMessages.mockReset().mockResolvedValue({ messages: [] });
+    piMock.writeUiHistory.mockReset().mockResolvedValue(undefined);
     clearThinkingDurationsForTest();
     vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
       rafCallbacks.push(cb);
@@ -190,6 +192,43 @@ describe('createAgentStore', () => {
 
     store.reset();
     expect(store.getLoadedSessionPath()).toBeUndefined();
+  });
+
+  it('loadMessages 在 uiHistory 比后端更长时使用 UI 完整历史', () => {
+    store = createAgentStore('.');
+    const uiHistory = [
+      { id: 'h-0', kind: 'user' as const, text: 'early', timestamp: 1 },
+      { id: 'h-1', kind: 'user' as const, text: 'recent', timestamp: 2 },
+    ];
+    store.loadMessages([{ role: 'user', content: 'recent', timestamp: 2 }] as never, {
+      force: true,
+      sessionPath: '/sessions/foo.jsonl',
+      uiHistory,
+    });
+    const msgs = store.useStore.getState().messages;
+    expect(msgs).toHaveLength(2);
+    expect(msgs[0].kind).toBe('user');
+    expect(msgs[0].kind === 'user' ? msgs[0].text : '').toBe('early');
+  });
+
+  it('loadMessages 首次载入用后端起底并写 UI 历史', async () => {
+    store = createAgentStore('.');
+    store.loadMessages([{ role: 'user', content: 'hello', timestamp: 1 }] as never, {
+      force: true,
+      sessionPath: '/sessions/foo.jsonl',
+    });
+    await vi.waitFor(() => expect(piMock.writeUiHistory).toHaveBeenCalled());
+    expect(piMock.writeUiHistory).toHaveBeenCalledWith('.', 'foo', expect.any(String));
+  });
+
+  it('agent_end flush 写入 UI 完整历史', async () => {
+    store = createAgentStore('.');
+    store.loadMessages([], { force: true, sessionPath: '/s/test.jsonl' });
+    piMock.writeUiHistory.mockClear();
+    emit({ type: 'agent_end', messages: [] });
+    flushRAF();
+    await vi.waitFor(() => expect(piMock.writeUiHistory).toHaveBeenCalled());
+    expect(piMock.writeUiHistory).toHaveBeenCalledWith('.', 'test', expect.any(String));
   });
 
   it('实时流式中（live + 未带 sessionPath）loadMessages 不被跳过仅在 force 时覆盖', () => {

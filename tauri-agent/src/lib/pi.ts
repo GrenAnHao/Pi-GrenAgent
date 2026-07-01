@@ -274,6 +274,12 @@ export const pi = {
   subagentList: (workspace: string) => invoke<SubAgentItem[]>('subagent_list', { workspace }),
   subagentCancel: (workspace: string, agentId: string) =>
     invoke<void>('subagent_cancel', { workspace, agentId }),
+  readUiHistory: (workspace: string, sessionKey: string) =>
+    invoke<string>('ui_history_read', { workspace, sessionKey }),
+  writeUiHistory: (workspace: string, sessionKey: string, content: string) =>
+    invoke<void>('ui_history_write', { workspace, sessionKey, content }),
+  deleteUiHistory: (workspace: string, sessionKey: string) =>
+    invoke<void>('ui_history_delete', { workspace, sessionKey }),
   runCommand: (workspace: string, command: string) =>
     invoke<unknown>('agent_prompt', { workspace, message: command }),
   readFile: (workspace: string, path: string) => invoke<string>('read_file', { workspace, path }),

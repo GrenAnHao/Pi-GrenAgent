@@ -8,10 +8,10 @@ export const chatStyles = createStaticStyles(({ css }) => ({
     gap: 8px;
     padding-block: 8px;
     max-width: 100%;
-    /* 视口外的消息交给浏览器跳过 layout/paint：大幅降低长对话「首次渲染」「切主题整片重排」开销。
-       contain-intrinsic-size 为屏外项提供占位高度（auto 让浏览器记住上次实测值），减少滚动跳动。 */
-    content-visibility: auto;
-    contain-intrinsic-size: auto 64px;
+    /* 这里不要再加 content-visibility:auto / contain-intrinsic-size：外层已是 virtua 虚拟列表
+       （离屏条目直接卸载，无需浏览器再做屏外跳过）。两者叠加会让 contain-intrinsic-size 的占位/
+       记忆高度与 virtua 实测高度打架——含多个工具的长 turn 折叠或重排后，条目底部会残留一大片空白
+       （表现为 turn 与其后 spawn_agent 卡片之间的大间隙）。 */
 
     &:hover .chat-actions,
     &:focus-within .chat-actions {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   expandSubAgents,
+  finalizeSubAgentMessages,
   subAgentMode,
   subAgentRoleLabel,
   latestStepFromMessages,
@@ -142,5 +143,50 @@ describe('latestStepFromMessages', () => {
 describe('latestSubAgentStep', () => {
   it('empty transcript → null', () => {
     expect(latestSubAgentStep('')).toBeNull();
+  });
+});
+
+describe('finalizeSubAgentMessages', () => {
+  const runningTool = {
+    kind: 'tool',
+    id: 't1',
+    toolCallId: 'c1',
+    toolName: 'bash',
+    args: {},
+    result: undefined,
+    status: 'running',
+  } as ChatMessage;
+
+  it('running status → returns the same array untouched', () => {
+    const msgs = [runningTool];
+    expect(finalizeSubAgentMessages(msgs, 'running')).toBe(msgs);
+  });
+
+  it('done → dangling running tool becomes done', () => {
+    const [m] = finalizeSubAgentMessages([runningTool], 'done');
+    expect(m.kind === 'tool' && m.status).toBe('done');
+  });
+
+  it('error → dangling running tool becomes error', () => {
+    const [m] = finalizeSubAgentMessages([runningTool], 'error');
+    expect(m.kind === 'tool' && m.status).toBe('error');
+  });
+
+  it('done → streaming assistant stops streaming', () => {
+    const assistant = {
+      kind: 'assistant',
+      id: 'a1',
+      text: 'partial',
+      thinking: '',
+      streaming: true,
+    } as ChatMessage;
+    const [m] = finalizeSubAgentMessages([assistant], 'done');
+    expect(m.kind === 'assistant' && m.streaming).toBe(false);
+  });
+
+  it('already-terminal steps are left as-is', () => {
+    const doneTool = { ...runningTool, status: 'done' } as ChatMessage;
+    const [m] = finalizeSubAgentMessages([doneTool], 'done');
+    expect(m.kind === 'tool' && m.status).toBe('done');
   });
 });

@@ -1,4 +1,4 @@
-import { lazy, Suspense, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import type { DisplayMessage } from './groupMessages';
 import { UserMessage } from './UserMessage';
 import { TurnTimeline } from './TurnTimeline';
@@ -7,18 +7,10 @@ import { AnswerCard } from './AnswerCard';
 import { PlanCard } from './PlanCard';
 import { QuestionsCard } from './QuestionsCard';
 import { VirtualizedMessageList } from './VirtualizedMessageList';
+import { ToolExecution } from '../tools/ToolExecution';
+import { SubAgentInline } from './SubAgentInline';
+import { SubAgentGroupInline, type NumberedUnit } from './SubAgentGroupInline';
 import { subAgentMode, taskLabel } from '../panels/subagentUtils';
-import type { NumberedUnit } from './SubAgentGroupInline';
-
-const ToolExecution = lazy(() =>
-  import('../tools/ToolExecution').then((m) => ({ default: m.ToolExecution })),
-);
-const SubAgentInline = lazy(() =>
-  import('./SubAgentInline').then((m) => ({ default: m.SubAgentInline })),
-);
-const SubAgentGroupInline = lazy(() =>
-  import('./SubAgentGroupInline').then((m) => ({ default: m.SubAgentGroupInline })),
-);
 
 interface ChatMessageItemsProps {
   messages: DisplayMessage[];
@@ -31,6 +23,8 @@ interface ChatMessageItemsProps {
   fill?: 'absolute' | 'flex';
   /** 每条消息左右内边距（主对话 24，子代理 16）。 */
   paddingInline?: number;
+  /** 会话 / 对话标识：变化时列表重置滚动锚点并贴底（透传给 VirtualizedMessageList）。 */
+  resetKey?: string | null;
   'data-testid'?: string;
 }
 
@@ -51,40 +45,34 @@ export function renderMessageBody(
         if (numbered.length <= 1) {
           const only = numbered[0];
           return (
-            <Suspense fallback={null}>
-              <SubAgentInline
-                messageId={msg.id}
-                toolCallId={msg.toolCallId}
-                index={only?.no ?? 1}
-                task={only?.unit.task ?? taskLabel(msg.args)}
-                result={msg.result}
-                status={msg.status}
-              />
-            </Suspense>
+            <SubAgentInline
+              messageId={msg.id}
+              toolCallId={msg.toolCallId}
+              index={only?.no ?? 1}
+              task={only?.unit.task ?? taskLabel(msg.args)}
+              result={msg.result}
+              status={msg.status}
+            />
           );
         }
         return (
-          <Suspense fallback={null}>
-            <SubAgentGroupInline
-              messageId={msg.id}
-              toolCallId={msg.toolCallId}
-              mode={subAgentMode(msg.args)}
-              status={msg.status}
-              units={numbered}
-            />
-          </Suspense>
+          <SubAgentGroupInline
+            messageId={msg.id}
+            toolCallId={msg.toolCallId}
+            mode={subAgentMode(msg.args)}
+            status={msg.status}
+            units={numbered}
+          />
         );
       }
       return (
-        <Suspense fallback={null}>
-          <ToolExecution
-            toolName={msg.toolName}
-            toolCallId={msg.toolCallId}
-            args={msg.args}
-            result={msg.result}
-            status={msg.status}
-          />
-        </Suspense>
+        <ToolExecution
+          toolName={msg.toolName}
+          toolCallId={msg.toolCallId}
+          args={msg.args}
+          result={msg.result}
+          status={msg.status}
+        />
       );
     case 'notice':
       if (msg.customType === 'agent-answer') return <AnswerCard content={msg.content} />;
@@ -106,6 +94,7 @@ export function ChatMessageItems({
   footer,
   fill,
   paddingInline,
+  resetKey,
   'data-testid': testId,
 }: ChatMessageItemsProps) {
   return (
@@ -114,6 +103,7 @@ export function ChatMessageItems({
       footer={footer}
       fill={fill}
       paddingInline={paddingInline}
+      resetKey={resetKey}
       data-testid={testId}
       renderItem={(msg) => renderMessageBody(msg, unitsByMessage, answeredQuestions)}
     />

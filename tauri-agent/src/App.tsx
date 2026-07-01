@@ -24,6 +24,7 @@ import { KnowledgePanel } from './features/knowledge/KnowledgePanel';
 import { useModuleStore, type WorkspaceView } from './stores/moduleStore';
 import { FullscreenLoading } from './components/FullscreenLoading';
 import { onPiEvent, pi, type OpenWorkspaceResult } from './lib/pi';
+import { readUiHistoryForSession, sessionKeyFromPath } from './lib/uiHistory';
 import { pickDirectory } from './lib/dialog';
 import { prewarmWorkspace } from './lib/prewarm';
 import { createStartupPerf } from './lib/startupPerf';
@@ -374,8 +375,11 @@ const Workspace = memo(function Workspace() {
 
         perf.start('getMessages');
         try {
-          const { messages } = await pi.getMessages(workspace);
-          if (alive) store.loadMessages(messages, { force: true, sessionPath: path });
+          const [{ messages }, uiHistory] = await Promise.all([
+            pi.getMessages(workspace),
+            readUiHistoryForSession(workspace, path),
+          ]);
+          if (alive) store.loadMessages(messages, { force: true, sessionPath: path, uiHistory });
         } catch {
           /* 无消息或加载失败，保持空 */
         }
@@ -444,6 +448,10 @@ const Workspace = memo(function Workspace() {
     void refreshAllSessions(true);
   }, [store]);
 
+  // 会话切换的单调递增序号：每次切换自增，await 链回来后据此判断是否已被更新的切换超越（最新胜出）。
+  // 修复「同项目快速来回切时先发起的链后返回、用旧会话消息覆盖当前显示 → 点击像没生效、要连点几次」。
+  const selectTokenRef = useRef(0);
+
   const handleOpenSession = useCallback(
     async (cwd: string, path: string) => {
       const st = useSessionStore.getState();
@@ -457,15 +465,23 @@ const Workspace = memo(function Workspace() {
       } else {
         // 同项目切会话：命中前端缓存先秒显（看过的会话立即出现）；未命中则置骨架屏给即时反馈，
         // 避免在 switchSession/getMessages 的后端往返期间界面冻在旧内容上「等好几秒才切过去」。
+        const token = ++selectTokenRef.current;
         const shown = store.showCachedSession(path);
-        if (!shown) setWorkspaceReady(false);
+        // 命中→就绪(秒显缓存内容)，未命中→骨架屏。之后仅最新 token 的链能再改就绪态与内容。
+        setWorkspaceReady(shown);
         try {
           await pi.switchSession(cwd, path);
-          const { messages } = await pi.getMessages(cwd);
+          // 已被更新的切换超越 → 丢弃本次后端结果，避免旧链用旧会话消息覆盖当前显示 / 污染缓存。
+          if (selectTokenRef.current !== token) return;
+          const [{ messages }, uiHistory] = await Promise.all([
+            pi.getMessages(cwd),
+            readUiHistoryForSession(cwd, path),
+          ]);
+          if (selectTokenRef.current !== token) return;
           // 命中缓存且内容未变时 loadMessages 内部会跳过重渲染（见 agent store），不会闪动。
-          store.loadMessages(messages, { force: true, sessionPath: path });
+          store.loadMessages(messages, { force: true, sessionPath: path, uiHistory });
         } finally {
-          if (!shown) setWorkspaceReady(true);
+          if (selectTokenRef.current === token) setWorkspaceReady(true);
         }
       }
     },
@@ -490,6 +506,9 @@ const Workspace = memo(function Workspace() {
     }
     try {
       await pi.deleteSession(cwd, path);
+      // 会话删成功后再删 UI 历史：若 deleteSession 失败（会话仍在），不应抹掉其完整历史。
+      const histKey = sessionKeyFromPath(path);
+      if (histKey) void pi.deleteUiHistory(cwd, histKey).catch(() => {});
       bumpSessionMutationEpoch();
       invalidateAllSessionsCache();
       if (wasActive) {
@@ -503,10 +522,16 @@ const Workspace = memo(function Workspace() {
           .filter((s) => s.cwd && pathsEquivalent(s.cwd, cwd))
           .sort((a, b) => (b.timestamp ?? '').localeCompare(a.timestamp ?? ''))[0];
         if (nextInProject) {
+          // 让本次「删除后自动切」超越之前在途的手动切链（旧链 await 回来会因 token 变化被丢弃），
+          // 避免删除后的显示被更早、更慢返回的手动切结果覆盖。
+          ++selectTokenRef.current;
           try {
             await pi.switchSession(cwd, nextInProject.path);
-            const { messages } = await pi.getMessages(cwd);
-            store.loadMessages(messages, { force: true, sessionPath: nextInProject.path });
+            const [{ messages }, uiHistory] = await Promise.all([
+              pi.getMessages(cwd),
+              readUiHistoryForSession(cwd, nextInProject.path),
+            ]);
+            store.loadMessages(messages, { force: true, sessionPath: nextInProject.path, uiHistory });
             st.setActiveSession(nextInProject.path);
             st.setWorkspaceSessionPath(cwd, nextInProject.path);
           } catch {

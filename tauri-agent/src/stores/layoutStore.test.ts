@@ -20,7 +20,7 @@ const base = {
   rightPanelWidth: 320,
 };
 
-describe('persist merge (启动默认不打开右侧面板)', () => {
+describe('persist merge (启动默认不打开右侧面板 / 底部终端)', () => {
   it('rehydrate 时强制 rightPanelOpen=false（即便上次存的是 true），但保留宽度等其它持久化字段', () => {
     const merge = useLayoutStore.persist.getOptions().merge!;
     const merged = merge(
@@ -30,6 +30,16 @@ describe('persist merge (启动默认不打开右侧面板)', () => {
     expect(merged.rightPanelOpen).toBe(false);
     expect(merged.rightPanelWidth).toBe(500);
     expect(merged.sidebarOpen).toBe(false);
+  });
+
+  it('rehydrate 时强制 terminalOpen=false（即便上次存的是 true），但保留 terminalHeight', () => {
+    const merge = useLayoutStore.persist.getOptions().merge!;
+    const merged = merge(
+      { terminalOpen: true, terminalHeight: 350 },
+      useLayoutStore.getState(),
+    ) as ReturnType<typeof useLayoutStore.getState>;
+    expect(merged.terminalOpen).toBe(false);
+    expect(merged.terminalHeight).toBe(350);
   });
 });
 

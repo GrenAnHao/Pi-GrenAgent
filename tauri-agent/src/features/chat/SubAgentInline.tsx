@@ -178,8 +178,8 @@ function SubAgentInlineInner({ messageId, toolCallId, index, task, result, statu
 
   const running = effectiveStatus === 'running';
 
-  // 运行中按 agentId 轮询 registry 取模型 + 最新一步（非运行/无 id 时静默）。
-  const live = useSubAgentLive(workspace, agentId, running);
+  // 运行中轮询 registry 取模型 + 最新一步；前台 spawn 工具未返回、无 agentId 时按 task 回退匹配。
+  const live = useSubAgentLive(workspace, agentId, running, task);
 
   const openInDock = (e?: MouseEvent) => {
     e?.stopPropagation();

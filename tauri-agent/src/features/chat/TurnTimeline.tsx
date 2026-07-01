@@ -1,4 +1,4 @@
-import { Suspense, lazy, memo, type ReactNode } from 'react';
+import { memo, type ReactNode } from 'react';
 import { Icon } from '@lobehub/ui';
 import { EyeOff } from 'lucide-react';
 import { createStaticStyles } from 'antd-style';
@@ -7,6 +7,8 @@ import { MessageActionBar } from './messageActions/MessageActionBar';
 import type { MessageActionContext } from './messageActions/types';
 import { ReasoningInline } from './ReasoningInline';
 import { LazyMarkdown } from './LazyMarkdown';
+import { ToolExecution } from '../tools/ToolExecution';
+import { ContextToolGroup } from '../tools/ContextToolGroup';
 import type { TimelineSegment } from './groupMessages';
 import { buildTurnRows } from './turnRows';
 import { useOptionalAgentStoreContext } from '../../stores/AgentStoreContext';
@@ -21,13 +23,6 @@ const styles = createStaticStyles(({ css, cssVar }) => ({
     color: ${cssVar.colorTextTertiary};
   `,
 }));
-
-const ToolExecution = lazy(() =>
-  import('../tools/ToolExecution').then((m) => ({ default: m.ToolExecution })),
-);
-const ContextToolGroup = lazy(() =>
-  import('../tools/ContextToolGroup').then((m) => ({ default: m.ContextToolGroup })),
-);
 
 interface TurnTimelineProps {
   segments: TimelineSegment[];
@@ -53,15 +48,13 @@ function SegmentItem({ segment }: { segment: TimelineSegment }) {
       );
     case 'tool':
       return (
-        <Suspense fallback={null}>
-          <ToolExecution
-            toolName={segment.toolName}
-            toolCallId={segment.toolCallId}
-            args={segment.args}
-            result={segment.result}
-            status={segment.status}
-          />
-        </Suspense>
+        <ToolExecution
+          toolName={segment.toolName}
+          toolCallId={segment.toolCallId}
+          args={segment.args}
+          result={segment.result}
+          status={segment.status}
+        />
       );
     default:
       return null;
@@ -133,9 +126,7 @@ function renderTurn(
       ) : null}
       {rows.map((row) =>
         row.kind === 'context' ? (
-          <Suspense key={row.id} fallback={null}>
-            <ContextToolGroup tools={row.tools} />
-          </Suspense>
+          <ContextToolGroup key={row.id} tools={row.tools} />
         ) : (
           <MemoSegment key={row.id} segment={row.segment} />
         ),

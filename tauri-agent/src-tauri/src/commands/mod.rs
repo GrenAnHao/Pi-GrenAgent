@@ -12,10 +12,12 @@ pub mod shell;
 pub mod skills;
 pub mod subagent;
 pub mod terminal;
+pub mod ui_history;
 pub mod usage;
 pub mod workspaces;
 
 pub use agent::*;
 pub use sessions::*;
 pub use subagent::*;
+pub use ui_history::*;
 pub use usage::*;

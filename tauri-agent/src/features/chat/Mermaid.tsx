@@ -31,6 +31,15 @@ const loadMermaid = () => {
 
 let renderSeq = 0;
 
+// 已渲染 SVG 缓存（按主题 + 源码）：mermaid 组件被虚拟列表离屏卸载后，滚回视口重新挂载时同步命中、
+// 直接显示，不再异步重画、不闪「Loading」，配合下方固定高度彻底消除滚动跳动。流式中间态不入缓存。
+const svgCache = new Map<string, { svg: string; autofixed: boolean }>();
+const cacheKeyOf = (dark: boolean, source: string) => `${dark ? 'd' : 'l'}|${source}`;
+
+// 固定展示高度：mermaid 以统一标准高度渲染，容器高度不随图内容 / 加载态变化，虚拟列表测高稳定，
+// 不再因「Loading(矮) → SVG(高)」或图与图之间的高度差异而滚动跳动。图在框内等比适配，点击放大看细节。
+const MERMAID_BOX_HEIGHT = 'min(56vh, 440px)';
+
 // 容器宽度变化超过该阈值（px）才触发重绘，过滤滚动条出现/字体回流等微小抖动。
 const RESIZE_THRESHOLD = 24;
 
@@ -189,16 +198,28 @@ const styles = createStaticStyles(({ css }) => ({
   fig: css`
     width: 100%;
     min-width: 0;
+    height: ${MERMAID_BOX_HEIGHT};
+    display: flex;
+    align-items: center;
+    justify-content: center;
     cursor: zoom-in;
 
     & svg {
       display: block;
       width: auto;
       height: auto;
+      /* 固定高度框内等比适配：宽/高都不超过框，大图缩小、竖高图不溢出；点击放大看细节。 */
       max-width: 100%;
-      /* 限高：竖向高图等比缩小到视口内，不再超出上下边界要滚动；点击放大看细节。 */
-      max-height: min(60vh, 480px);
+      max-height: 100%;
     }
+  `,
+  loading: css`
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: ${MERMAID_BOX_HEIGHT};
+    color: ${cssVar.colorTextTertiary};
+    font-size: 13px;
   `,
   fixedBadge: css`
     position: absolute;
@@ -320,8 +341,12 @@ const styles = createStaticStyles(({ css }) => ({
 export const Mermaid = memo(({ code, streaming }: { code: string; streaming?: boolean }) => {
   const theme = useTheme();
   const ctx = useOptionalAgentStoreContext();
-  const [svg, setSvg] = useState('');
-  const [autofixed, setAutofixed] = useState(false);
+  // 初始即尝试命中已渲染缓存：滚回视口 / 重挂载时同步显示，不闪 Loading、不产生高度突变。
+  const initCached = svgCache.get(
+    cacheKeyOf(theme.isDarkMode, useMermaidFixStore.getState().fixes[code]?.code ?? code),
+  );
+  const [svg, setSvg] = useState(initCached?.svg ?? '');
+  const [autofixed, setAutofixed] = useState(initCached?.autofixed ?? false);
   const [failed, setFailed] = useState(false);
   const [errMsg, setErrMsg] = useState('');
   const [errOpen, setErrOpen] = useState(false);
@@ -348,6 +373,16 @@ export const Mermaid = memo(({ code, streaming }: { code: string; streaming?: bo
 
   useEffect(() => {
     let alive = true;
+    // 命中已渲染缓存：同步显示、跳过异步重画与 Loading（滚回视口不闪、容器高度恒定、不跳）。
+    const cached = svgCache.get(cacheKeyOf(theme.isDarkMode, source));
+    if (cached) {
+      setSvg(cached.svg);
+      setAutofixed(cached.autofixed);
+      setFailed(false);
+      setErrMsg('');
+      lastWidthRef.current = wrapRef.current?.clientWidth ?? 0;
+      return;
+    }
     setFailed(false);
     setErrMsg('');
     setAutofixed(false);
@@ -365,6 +400,8 @@ export const Mermaid = memo(({ code, streaming }: { code: string; streaming?: bo
         const cleaned = sanitizeMermaidCode(source);
         const { svg: out, autofixed: fx, code: rendered } = await renderWithAutofix(mermaid, cleaned, host);
         if (!out.trim()) throw new Error('Mermaid 返回空 SVG');
+        // 缓存渲染结果供滚回视口时同步复用；流式中间态每帧 code 变、不入缓存（避免污染 + Map 膨胀）。
+        if (!streaming) svgCache.set(cacheKeyOf(theme.isDarkMode, source), { svg: out, autofixed: fx });
         if (alive) {
           setSvg(out);
           setAutofixed(fx);
@@ -395,7 +432,7 @@ export const Mermaid = memo(({ code, streaming }: { code: string; streaming?: bo
     return () => {
       alive = false;
     };
-  }, [code, source, persistedFix, theme.isDarkMode, theme.fontFamily, resizeTick]);
+  }, [code, source, persistedFix, theme.isDarkMode, theme.fontFamily, resizeTick, streaming]);
 
   // 监听容器宽度，按新宽度重绘以适配布局。三处节流避免无谓重渲：
   // 1) 仅宽度变化超阈值才重绘（过滤滚动条/字体回流抖动）；
@@ -597,7 +634,7 @@ export const Mermaid = memo(({ code, streaming }: { code: string; streaming?: bo
       </div>
     );
   } else if (!svg) {
-    body = <div style={{ opacity: 0.6, padding: 16 }}>Loading diagram…</div>;
+    body = <div className={styles.loading}>Loading diagram…</div>;
   } else {
     const copyMenuItems: MenuProps['items'] = [
       {

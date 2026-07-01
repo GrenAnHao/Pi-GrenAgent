@@ -4,6 +4,7 @@ import { useThrottledValue } from '../../hooks/useThrottledValue';
 import { groupMessages } from '../chat/groupMessages';
 import { ChatMessageItems } from '../chat/ChatMessageItems';
 import { computeSubAgentUnits, computeAnsweredQuestions } from '../chat/messagePrecompute';
+import { finalizeSubAgentMessages } from './subagentUtils';
 
 /** 从 spawn_agent 工具结果里取原始 JSONL transcript（details.transcript）。 */
 function transcriptOf(result: unknown): string {
@@ -50,7 +51,8 @@ export function SubAgentConversation({ task, result, status, 'data-testid': test
       const text = fallbackText(liveResult);
       if (text) out.push({ kind: 'assistant', id: 'sa-out', text, thinking: '', streaming: status === 'running' });
     }
-    return out;
+    // 终态收尾：transcript 末步缺 end 事件时回放会残留「运行中」步骤（一直转圈），据整体状态收尾。
+    return finalizeSubAgentMessages(out, status);
   }, [task, liveResult, status]);
 
   const display = useMemo(() => groupMessages(messages), [messages]);
@@ -63,6 +65,7 @@ export function SubAgentConversation({ task, result, status, 'data-testid': test
       unitsByMessage={unitsByMessage}
       answeredQuestions={answeredQuestions}
       paddingInline={16}
+      resetKey={task}
       data-testid={testId}
     />
   );

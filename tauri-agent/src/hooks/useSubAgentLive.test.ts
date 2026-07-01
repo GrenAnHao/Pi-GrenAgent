@@ -21,9 +21,21 @@ describe('useSubAgentLive', () => {
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it('no agentId → never polls', () => {
-    const spy = vi.spyOn(pi, 'subagentList').mockResolvedValue([]);
-    renderHook(() => useSubAgentLive('ws', null, true));
-    expect(spy).not.toHaveBeenCalled();
+  it('no agentId + sole running row → falls back by task/uniqueness and exposes model', async () => {
+    vi.spyOn(pi, 'subagentList').mockResolvedValue([
+      { id: 'ag9', task: 'foo', status: 'running', model: 'deepseek-v4', transcript: '', createdAt: 0, updatedAt: 0 },
+    ]);
+    const { result } = renderHook(() => useSubAgentLive('ws', null, true, 'foo'));
+    await waitFor(() => expect(result.current.model).toBe('deepseek-v4'));
+  });
+
+  it('no agentId + multiple running + no task match → does not guess', async () => {
+    vi.spyOn(pi, 'subagentList').mockResolvedValue([
+      { id: 'a', task: 'x', status: 'running', model: 'm1', transcript: '', createdAt: 0, updatedAt: 0 },
+      { id: 'b', task: 'y', status: 'running', model: 'm2', transcript: '', createdAt: 0, updatedAt: 0 },
+    ]);
+    const { result } = renderHook(() => useSubAgentLive('ws', null, true, 'zzz'));
+    await waitFor(() => expect(pi.subagentList).toHaveBeenCalled());
+    expect(result.current.model).toBeNull();
   });
 });

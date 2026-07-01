@@ -6,16 +6,24 @@ import {
   messagesFromAgent,
   excludedFromAgent,
   type AgentState,
+  type ChatMessage,
   type UserImage,
 } from './agentReducer';
 import { pi, onPiEvent, onPiExit, type AgentEvent, type AgentMessage } from '../lib/pi';
 import { getThinkingDuration, saveThinkingDuration } from '../lib/thinkingDurations';
 import { getCachedSession, setCachedSession, sessionSignature } from '../lib/sessionMessageCache';
+import { sessionKeyFromPath, serializeHistory } from '../lib/uiHistory';
 
 export interface LoadMessagesOptions {
   force?: boolean;
   /** 本次载入对应的会话路径：记录后供切回时判断「内存内容是否已是目标会话」从而跳过重载。 */
   sessionPath?: string | null;
+  /**
+   * 前端持久化的 UI 完整历史（来自磁盘 ui-history）。pi auto-compaction 会让后端 getMessages 变短，
+   * 传入后：若它比后端更完整，则以它为 UI 显示源，避免压缩后的短历史盖掉完整对话。
+   * rewind 等需要后端权威结果的场景不传（走后端）。
+   */
+  uiHistory?: ChatMessage[];
 }
 
 export interface AgentStoreApi {
@@ -110,6 +118,10 @@ export function createAgentStore(workspace: string): AgentStoreApi {
       if (loadedSessionPath != null) {
         currentSig = sessionSignature(state.messages);
         setCachedSession(loadedSessionPath, state.messages, currentSig);
+        // 持久化 UI 完整历史：state.messages 是前端累积的完整对话（reducer 不删），每轮结束覆盖写盘。
+        // 即使随后 pi auto-compaction 压缩了后端会话，这份磁盘历史仍完整，重载时据此还原（fire-and-forget）。
+        const key = sessionKeyFromPath(loadedSessionPath);
+        if (key) void pi.writeUiHistory(workspace, key, serializeHistory(state.messages)).catch(() => {});
       }
     }
   };
@@ -156,7 +168,11 @@ export function createAgentStore(workspace: string): AgentStoreApi {
     if (liveActivity && !options?.force) return;
     const sessionPath =
       options && 'sessionPath' in options ? options.sessionPath ?? null : undefined;
-    const processed = messagesFromAgent(msgs, getThinkingDuration);
+    const backend = messagesFromAgent(msgs, getThinkingDuration);
+    // UI 完整历史优先：pi auto-compaction 会让后端历史变短，前端持久化的完整历史（uiHistory）更长时用它，
+    // 避免压缩后的短历史盖掉完整对话（rewind 等需要后端权威时调用方不传 uiHistory，自然走后端）。
+    const uiHistory = options?.uiHistory;
+    const processed = uiHistory && uiHistory.length > backend.length ? uiHistory : backend;
     const sig = sessionSignature(processed);
     // 后台刷新命中「同一会话 + 内容未变」→ 跳过 setState：缓存已秒显，无谓重渲染会让整列闪一下。
     if (sessionPath != null && sessionPath === loadedSessionPath && sig === currentSig) {
@@ -170,6 +186,11 @@ export function createAgentStore(workspace: string): AgentStoreApi {
     clearQueue();
     // 从会话树重建上下文排除集（best-effort），切换 / 重载会话后恢复灰显。
     setFullState({ ...initialAgentState(), messages: processed, excluded: excludedFromAgent(msgs) });
+    // 首次（无 uiHistory / uiHistory 更短）用后端起底：写一份 UI 历史，之后运行中每轮结束再覆盖为完整。
+    if (sessionPath != null && processed === backend) {
+      const key = sessionKeyFromPath(sessionPath);
+      if (key) void pi.writeUiHistory(workspace, key, serializeHistory(backend)).catch(() => {});
+    }
   };
 
   // excluded 是 Set：每次以新 Set 替换，保证 zustand 浅比较能触发订阅者重渲染。

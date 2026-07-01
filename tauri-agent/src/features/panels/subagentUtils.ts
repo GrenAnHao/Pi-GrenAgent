@@ -41,6 +41,28 @@ export function latestSubAgentStep(transcript: string): { step: number; action: 
   return latestStepFromMessages(messagesFromTranscript(transcript));
 }
 
+/**
+ * 终态兜底：运行中 transcript 的末步可能只有 tool_execution_start 而缺 tool_execution_end
+ * （子代理进程结束时最后一步的结果事件尚未写入 transcript），回放会把该步一直停在 running、转圈不停。
+ * 整体已进入终态（done/error）时据此把残留的「运行中」步骤收尾：工具置为对应终态、流式助手收流。
+ * 运行中不动（末步确实在跑，保留 running 才是对的）。纯函数，便于单测。
+ */
+export function finalizeSubAgentMessages(
+  messages: ChatMessage[],
+  status: 'running' | 'done' | 'error',
+): ChatMessage[] {
+  if (status === 'running') return messages;
+  return messages.map((m) => {
+    if (m.kind === 'tool' && m.status === 'running') {
+      return { ...m, status: status === 'error' ? 'error' : 'done' };
+    }
+    if (m.kind === 'assistant' && m.streaming) {
+      return { ...m, streaming: false };
+    }
+    return m;
+  });
+}
+
 function detailsOf(result: unknown): Record<string, unknown> | null {
   if (!result || typeof result !== 'object') return null;
   const details = (result as { details?: unknown }).details;

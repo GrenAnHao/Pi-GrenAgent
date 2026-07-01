@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { useAgentStore } from '../../stores/AgentStoreContext';
+import { useSessionStore } from '../../store/session';
 import { useThrottledValue } from '../../hooks/useThrottledValue';
 import { groupMessages } from './groupMessages';
 import { ChatMessageItems } from './ChatMessageItems';
@@ -8,6 +9,8 @@ import { PreparingIndicator } from './PreparingIndicator';
 
 export function ChatListView() {
   const { useStore } = useAgentStore();
+  // 当前会话 path 作为列表 resetKey：切换会话时重置滚动锚点并贴底（修复首次不贴底 / 切换抖动）。
+  const sessionPath = useSessionStore((s) => s.activeSessionPath);
   const messages = useStore((s) => s.messages);
   const isStreaming = useStore((s) => s.isStreaming);
   const awaitingResponse = useStore((s) => s.awaitingResponse);
@@ -34,6 +37,7 @@ export function ChatListView() {
       footer={showPreparing ? <PreparingIndicator /> : undefined}
       fill="absolute"
       paddingInline={24}
+      resetKey={sessionPath}
       data-testid="chat-scroll"
     />
   );

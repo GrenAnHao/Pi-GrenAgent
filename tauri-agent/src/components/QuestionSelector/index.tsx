@@ -1,9 +1,11 @@
-import { Button, Icon } from '@lobehub/ui';
-import { Check, MessageCircleQuestion } from 'lucide-react';
+import { Button } from '@lobehub/ui';
+import { MessageCircleQuestion } from 'lucide-react';
 import { createStaticStyles, cssVar, cx } from 'antd-style';
 import { memo, useState } from 'react';
 import type { ImageAttachment } from '../../features/chat/input/ChatInputContext';
 import { LazyMarkdown } from '../../features/chat/LazyMarkdown';
+import { ConvCard } from '../../features/chat/conv/ConvCard';
+import { OptionRow } from '../../features/chat/conv/OptionRow';
 import { CUSTOM_OPTION_ID } from './constants';
 import { ExtraContent } from './ExtraContent';
 
@@ -45,169 +47,58 @@ export interface QuestionSelectorProps {
 }
 
 const styles = createStaticStyles(({ css }) => ({
-  root: css`
+  // 外层：统一设计封顶 600px、左对齐随内容（窄屏自适应）。
+  wrap: css`
     width: 100%;
     max-width: 600px;
-    overflow: hidden;
-    border: 1px solid ${cssVar.colorBorderSecondary};
-    border-radius: ${cssVar.borderRadius};
-    background: ${cssVar.colorFillQuaternary};
-  `,
-  head: css`
-    display: flex;
-    gap: 7px;
-    align-items: center;
-    padding: 10px 14px;
-    border-block-end: 1px solid ${cssVar.colorBorderSecondary};
-    font-size: 11px;
-    color: ${cssVar.colorTextTertiary};
-  `,
-  dot: css`
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: ${cssVar.colorPrimary};
-  `,
-  count: css`
-    margin-inline-start: auto;
-    color: ${cssVar.colorPrimary};
-  `,
-  dots: css`
-    display: flex;
-    gap: 6px;
-    margin-inline-start: auto;
-  `,
-  step: css`
-    min-width: 18px;
-    height: 18px;
-    padding: 0 4px;
-    border-radius: 5px;
-    border: 1px solid ${cssVar.colorBorderSecondary};
-    font-size: 10px;
-    color: ${cssVar.colorTextTertiary};
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-  `,
-  stepDone: css`
-    background: rgba(126, 226, 168, 0.15);
-    border-color: transparent;
-    color: #7ee2a8;
-  `,
-  stepCur: css`
-    background: ${cssVar.colorPrimary};
-    border-color: ${cssVar.colorPrimary};
-    color: ${cssVar.colorBgContainer};
-    font-weight: 700;
   `,
   body: css`
-    padding: 12px 14px;
+    padding: 10px 12px;
   `,
   question: css`
+    margin-block-end: 10px;
     font-size: 14px;
     font-weight: 600;
     line-height: 1.45;
     color: ${cssVar.colorText};
-    margin-block-end: 10px;
   `,
+  // 选项多时卡内滚动，卡头/页脚（ConvCard 提供）固定。
   options: css`
     display: flex;
     flex-direction: column;
-    gap: 7px;
+    gap: 6px;
+    max-height: 260px;
+    overflow-y: auto;
   `,
-  optionWrap: css`
-    display: flex;
-    flex-direction: column;
-    border: 1px solid ${cssVar.colorBorderSecondary};
-    border-radius: 6px;
-    background: ${cssVar.colorFillQuaternary};
-    overflow: hidden;
-    transition:
-      border-color 0.12s ease,
-      background 0.12s ease;
-
-    &:hover {
-      border-color: ${cssVar.colorPrimary};
-    }
-  `,
-  optionWrapSel: css`
-    border-color: ${cssVar.colorPrimary};
-    background: ${cssVar.colorPrimaryBg};
-  `,
-  option: css`
-    display: flex;
-    gap: 10px;
-    align-items: flex-start;
-    width: 100%;
-    padding: 9px 11px;
-    border: none;
-    background: transparent;
-    color: ${cssVar.colorText};
-    font-size: 13px;
-    text-align: start;
-    cursor: pointer;
-  `,
-  letter: css`
-    flex: none;
-    width: 19px;
-    height: 19px;
-    border-radius: 50%;
-    background: ${cssVar.colorFillSecondary};
-    color: ${cssVar.colorTextSecondary};
-    font-size: 11px;
-    font-weight: 700;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    margin-block-start: 1px;
-  `,
-  letterMulti: css`
-    border-radius: 6px;
-  `,
-  letterSelected: css`
-    background: ${cssVar.colorPrimary};
-    color: ${cssVar.colorBgContainer};
-  `,
-  optionLabel: css`
-    flex: 1;
-    line-height: 1.4;
-  `,
-  check: css`
-    flex: none;
-    margin-inline-start: auto;
-    color: ${cssVar.colorPrimary};
-  `,
+  // 自定义项（选中「其他」）内联输入框，贴在该选项行下方。
   customInput: css`
     width: 100%;
+    margin-block-start: 6px;
     padding: 7px 11px;
-    border: none;
-    border-block-start: 1px solid ${cssVar.colorBorderSecondary};
+    border: 1px solid ${cssVar.colorBorderSecondary};
+    border-radius: 6px;
     background: ${cssVar.colorFillSecondary};
     color: ${cssVar.colorText};
     font-size: 13px;
     outline: none;
-    &::placeholder { color: ${cssVar.colorTextTertiary}; }
-    &:focus { background: ${cssVar.colorFillTertiary}; }
+
+    &::placeholder {
+      color: ${cssVar.colorTextTertiary};
+    }
+    &:focus {
+      border-color: ${cssVar.colorInfo};
+    }
   `,
-  footer: css`
-    display: flex;
-    gap: 8px;
-    align-items: center;
-    justify-content: flex-end;
-    padding: 10px 14px;
-    border-block-start: 1px solid ${cssVar.colorBorderSecondary};
-    background: ${cssVar.colorFillQuaternary};
+  // 已作答后的只读摘要行（无页脚）。
+  doneText: css`
+    padding: 10px 12px;
+    font-size: 12px;
+    color: ${cssVar.colorTextTertiary};
   `,
+  // 分页页脚中部「已答 N / M」计数，把提交按钮顶到右侧。
   footMid: css`
     margin-inline-end: auto;
     font-size: 11px;
-    color: ${cssVar.colorTextTertiary};
-  `,
-  doneText: css`
-    padding: 10px 14px;
-    border-block-start: 1px solid ${cssVar.colorBorderSecondary};
-    background: ${cssVar.colorFillQuaternary};
-    font-size: 12px;
     color: ${cssVar.colorTextTertiary};
   `,
 }));
@@ -224,7 +115,10 @@ function questionSatisfied(
   return true;
 }
 
-/** 通用选择题 UI：单选/多选、自定义、补充说明（可贴图）；多题时分页步骤呈现。 */
+/**
+ * 通用选择题 UI（对齐对话项统一视觉：ConvCard 卡壳 + OptionRow 选项行）。
+ * 支持单选 / 多选、自定义项（内联输入）、补充说明（可贴图）；多题时分页步骤呈现。
+ */
 export const QuestionSelector = memo(function QuestionSelector({
   questions,
   selected,
@@ -260,128 +154,114 @@ export const QuestionSelector = memo(function QuestionSelector({
   const picked = q ? (selected[q.id] ?? []) : [];
   const pickedCount = picked.filter((id) => id !== CUSTOM_OPTION_ID || customTexts[q?.id ?? '']?.trim()).length;
 
-  return (
-    <div className={cx(styles.root, className)} data-testid={testId}>
+  // 卡头右侧 tag：多题显进度 + 单/多选；单题多选显已选计数；单题单选显「单选」。
+  const tag = paged
+    ? `${idx + 1}/${questions.length} · ${q?.allowMultiple ? '多选' : '单选'}`
+    : q?.allowMultiple
+      ? `多选 · 已选 ${pickedCount}`
+      : '单选';
 
-      <div className={styles.head}>
-        <Icon icon={MessageCircleQuestion} size={13} />
-        <span className={styles.dot} />
-        <span>
-          {paged ? `第 ${idx + 1} / ${questions.length} 题` : headerTitle} · {q?.allowMultiple ? '可多选' : '单选'}
-        </span>
-        {paged ? (
-          <span className={styles.dots}>
-            {questions.map((qq, i) => (
-              <span key={qq.id} className={cx(styles.step, i < idx && styles.stepDone, i === idx && styles.stepCur)}>
-                {i + 1}
-              </span>
-            ))}
+  const footer =
+    !disabled && !doneLabel ? (
+      paged ? (
+        <>
+          <Button data-testid={`${testId}-prev`} disabled={idx === 0} onClick={() => setStep(idx - 1)} size="small">
+            上一题
+          </Button>
+          <span className={styles.footMid}>
+            已答 {answeredCount} / {questions.length}
           </span>
-        ) : q?.allowMultiple ? (
-          <span className={styles.count}>已选 {pickedCount}</span>
-        ) : null}
-      </div>
-
-      {q ? (
-        <div className={styles.body}>
-          <div className={styles.question}>
-            {/`/.test(q.title) ? (
-              <LazyMarkdown enableMermaid={false} fontSize={14} variant="chat">
-                {q.title}
-              </LazyMarkdown>
-            ) : (
-              q.title
-            )}
-          </div>
-          <div className={styles.options}>
-            {q.options.map((o, oi) => {
-              const isSel = picked.includes(o.id);
-              const isCustom = o.id === CUSTOM_OPTION_ID;
-              return (
-                <div key={o.id} className={cx(styles.optionWrap, isSel && styles.optionWrapSel)}>
-                  <button
-                    className={styles.option}
-                    data-testid={`${testId}-opt-${q.id}-${o.id}`}
-                    disabled={disabled}
-                    onClick={() => onToggle(q.id, o.id, Boolean(q.allowMultiple))}
-                    type="button"
-                  >
-                    <span className={cx(styles.letter, q.allowMultiple && styles.letterMulti, isSel && styles.letterSelected)}>
-                      {String.fromCharCode(65 + oi)}
-                    </span>
-                    <span className={styles.optionLabel}>{o.label}</span>
-                    {isSel ? <Icon className={styles.check} icon={Check} size={14} /> : null}
-                  </button>
-                  {isCustom && isSel && onCustomTextChange ? (
-                    <input
-                      // eslint-disable-next-line jsx-a11y/no-autofocus
-                      autoFocus
-                      className={styles.customInput}
-                      data-testid={`${testId}-custom-${q.id}`}
-                      onChange={(e) => onCustomTextChange(q.id, e.target.value)}
-                      onClick={(e) => e.stopPropagation()}
-                      placeholder="请输入自定义答案"
-                      type="text"
-                      value={customTexts[q.id] ?? ''}
-                    />
-                  ) : null}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      ) : null}
-
-      {showExtra && isLast ? (
-        <ExtraContent
-          allowImages={allowExtraImages}
-          data-testid={`${testId}-extra`}
-          images={extraImages}
-          onImagesChange={onExtraImagesChange ?? (() => {})}
-          onTextChange={onExtraTextChange}
-          placeholder={extraPlaceholder}
-          text={extraText}
-        />
-      ) : null}
-
-      {doneLabel ? <div className={styles.doneText}>{doneLabel}</div> : null}
-
-      {!disabled && !doneLabel ? (
-        <div className={styles.footer}>
-          {paged ? (
-            <>
-              <Button data-testid={`${testId}-prev`} disabled={idx === 0} onClick={() => setStep(idx - 1)} size="small">
-                ← 上一题
-              </Button>
-              <span className={styles.footMid}>
-                已答 {answeredCount} / {questions.length}
-              </span>
-              {isLast ? (
-                <Button data-testid={`${testId}-submit`} disabled={!allOk} onClick={onContinue} size="small" type="primary">
-                  ✓ 提交
-                </Button>
-              ) : (
-                <Button data-testid={`${testId}-next`} disabled={!curOk} onClick={() => setStep(idx + 1)} size="small" type="primary">
-                  下一题 →
-                </Button>
-              )}
-            </>
+          {isLast ? (
+            <Button data-testid={`${testId}-submit`} disabled={!allOk} onClick={onContinue} size="small" type="primary">
+              提交
+            </Button>
           ) : (
-            <>
-              {onSkip ? (
-                <Button data-testid={`${testId}-skip`} onClick={onSkip} size="small">
-                  {skipLabel}
-                </Button>
-              ) : null}
-              {onContinue ? (
-                <Button data-testid={`${testId}-continue`} disabled={!allOk} onClick={onContinue} size="small" type="primary">
-                  {continueLabel}
-                </Button>
-              ) : null}
-            </>
+            <Button data-testid={`${testId}-next`} disabled={!curOk} onClick={() => setStep(idx + 1)} size="small" type="primary">
+              下一题
+            </Button>
           )}
-        </div>
-      ) : null}
+        </>
+      ) : (
+        <>
+          {onSkip ? (
+            <Button data-testid={`${testId}-skip`} onClick={onSkip} size="small">
+              {skipLabel}
+            </Button>
+          ) : (
+            <span />
+          )}
+          {onContinue ? (
+            <Button data-testid={`${testId}-continue`} disabled={!allOk} onClick={onContinue} size="small" type="primary">
+              {continueLabel}
+            </Button>
+          ) : null}
+        </>
+      )
+    ) : undefined;
+
+  return (
+    <div className={cx(styles.wrap, className)} data-testid={testId}>
+      <ConvCard footer={footer} icon={MessageCircleQuestion} label={headerTitle} tag={tag}>
+        {q ? (
+          <div className={styles.body}>
+            <div className={styles.question}>
+              {/`/.test(q.title) ? (
+                <LazyMarkdown enableMermaid={false} fontSize={14} variant="chat">
+                  {q.title}
+                </LazyMarkdown>
+              ) : (
+                q.title
+              )}
+            </div>
+            <div className={styles.options}>
+              {q.options.map((o, oi) => {
+                const isSel = picked.includes(o.id);
+                const isCustom = o.id === CUSTOM_OPTION_ID;
+                return (
+                  <div key={o.id} data-testid={`${testId}-opt-${q.id}-${o.id}`}>
+                    <OptionRow
+                      index={String.fromCharCode(65 + oi)}
+                      label={o.label}
+                      multi={Boolean(q.allowMultiple)}
+                      onClick={() => {
+                        if (!disabled) onToggle(q.id, o.id, Boolean(q.allowMultiple));
+                      }}
+                      selected={isSel}
+                    />
+                    {isCustom && isSel && onCustomTextChange ? (
+                      <input
+                        // eslint-disable-next-line jsx-a11y/no-autofocus
+                        autoFocus
+                        className={styles.customInput}
+                        data-testid={`${testId}-custom-${q.id}`}
+                        onChange={(e) => onCustomTextChange(q.id, e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        placeholder="请输入自定义答案"
+                        type="text"
+                        value={customTexts[q.id] ?? ''}
+                      />
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
+
+        {showExtra && isLast ? (
+          <ExtraContent
+            allowImages={allowExtraImages}
+            data-testid={`${testId}-extra`}
+            images={extraImages}
+            onImagesChange={onExtraImagesChange ?? (() => {})}
+            onTextChange={onExtraTextChange}
+            placeholder={extraPlaceholder}
+            text={extraText}
+          />
+        ) : null}
+
+        {doneLabel ? <div className={styles.doneText}>{doneLabel}</div> : null}
+      </ConvCard>
     </div>
   );
 });
